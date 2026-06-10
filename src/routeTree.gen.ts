@@ -18,6 +18,7 @@ import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated.
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated.profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
 import { Route as AuthenticatedWallpapersIndexRouteImport } from './routes/_authenticated.wallpapers.index'
+import { Route as ApiAiApplyWallpaperRouteImport } from './routes/api.ai.apply-wallpaper'
 import { Route as AuthenticatedWallpapersNewRouteImport } from './routes/_authenticated.wallpapers.new'
 import { Route as AuthenticatedWallpapersIdRouteImport } from './routes/_authenticated.wallpapers.$id'
 import { Route as AuthenticatedToolsWallpaperVisualizerRouteImport } from './routes/_authenticated.tools.wallpaper-visualizer'
@@ -69,6 +70,11 @@ const AuthenticatedWallpapersIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedWallpapersRoute,
   } as any)
+const ApiAiApplyWallpaperRoute = ApiAiApplyWallpaperRouteImport.update({
+  id: '/api/ai/apply-wallpaper',
+  path: '/api/ai/apply-wallpaper',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedWallpapersNewRoute =
   AuthenticatedWallpapersNewRouteImport.update({
     id: '/new',
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
   '/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
+  '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
   '/wallpapers/': typeof AuthenticatedWallpapersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
   '/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
+  '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
   '/wallpapers': typeof AuthenticatedWallpapersIndexRoute
 }
 export interface FileRoutesById {
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/_authenticated/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
   '/_authenticated/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/_authenticated/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
+  '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
   '/_authenticated/wallpapers/': typeof AuthenticatedWallpapersIndexRoute
 }
 export interface FileRouteTypes {
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/tools/wallpaper-visualizer'
     | '/wallpapers/$id'
     | '/wallpapers/new'
+    | '/api/ai/apply-wallpaper'
     | '/wallpapers/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/tools/wallpaper-visualizer'
     | '/wallpapers/$id'
     | '/wallpapers/new'
+    | '/api/ai/apply-wallpaper'
     | '/wallpapers'
   id:
     | '__root__'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tools/wallpaper-visualizer'
     | '/_authenticated/wallpapers/$id'
     | '/_authenticated/wallpapers/new'
+    | '/api/ai/apply-wallpaper'
     | '/_authenticated/wallpapers/'
   fileRoutesById: FileRoutesById
 }
@@ -186,6 +198,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiAiApplyWallpaperRoute: typeof ApiAiApplyWallpaperRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/wallpapers/'
       preLoaderRoute: typeof AuthenticatedWallpapersIndexRouteImport
       parentRoute: typeof AuthenticatedWallpapersRoute
+    }
+    '/api/ai/apply-wallpaper': {
+      id: '/api/ai/apply-wallpaper'
+      path: '/api/ai/apply-wallpaper'
+      fullPath: '/api/ai/apply-wallpaper'
+      preLoaderRoute: typeof ApiAiApplyWallpaperRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/wallpapers/new': {
       id: '/_authenticated/wallpapers/new'
@@ -340,6 +360,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiAiApplyWallpaperRoute: ApiAiApplyWallpaperRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

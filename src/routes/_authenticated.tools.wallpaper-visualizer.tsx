@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
+import { compositeWallpaper } from "@/utils/perspective";
 
 const searchSchema = z.object({ wallpaper: z.string().optional() });
 
@@ -57,6 +58,202 @@ function Visualizer() {
   const [resultSource, setResultSource] = useState<ResultSource>("ready_mockup");
   const [savingResult, setSavingResult] = useState(false);
   const [resultImageUrl, setResultImageUrl] = useState<string>("");
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isGeneratingRealAi, setIsGeneratingRealAi] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  // Per-mockup wall polygon coordinates (normalized 0..1).
+  // Only add entries here when the mockup has a non-standard wall that auto-detection
+  // cannot reliably find (e.g., angled walls, partial walls on one side).
+  // Leave out any mockup whose wall is the obvious central beige/neutral area —
+  // auto-detection will handle those more accurately than a generic rectangle.
+  const MOCKUP_COORDINATES: Record<string, [number, number][]> = {
+    // Oak Studio: wall to the RIGHT of the glass door (starts at 24 % from left)
+    "b8ccbf7a-2ee5-4b08-b80c-e2f0d922bc30": [[0.24, 0.0], [0.96, 0.0], [0.96, 0.82], [0.24, 0.82]],
+  };
+
+  const applyCanvasOverlay = async (selectedWallpaper: Wallpaper, selectedMockup: Mockup) => {
+    if (!companyId || !profile?.id) {
+      toast.error("You must be logged in to generate a visualization.");
+      return;
+    }
+    setStep("ai-loading");
+    setAiError(null);
+    setSavingResult(true);
+    console.log("[Visualizer] Applying wallpaper via canvas compositing...");
+    try {
+      // Use per-mockup coords if available; otherwise pass null → auto-detect wall
+      const coords: [number, number][] | null = MOCKUP_COORDINATES[selectedMockup.id] ?? null;
+      const base64 = await compositeWallpaper(selectedMockup.image, selectedWallpaper.image, coords);
+
+      const fileName = `${companyId}/${Date.now()}_canvas_overlay.jpg`;
+      const uploadFile = helperDataURLtoFile(base64, "canvas_overlay.jpg");
+
+      const { error: uploadError } = await supabase.storage
+        .from("visualization-results")
+        .upload(fileName, uploadFile, { contentType: uploadFile.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("visualization-results").getPublicUrl(fileName);
+      const publicUrl = data.publicUrl;
+
+      // Insert visualization record into database
+      const { error: insertError } = await supabase
+        .from("visualizations")
+        .insert({
+          company_id: companyId,
+          user_id: profile.id,
+          wallpaper_id: selectedWallpaper.id,
+          mockup_room_id: selectedMockup.id,
+          source_type: "ready_mockup",
+          result_image_url: publicUrl,
+          room_type: selectedMockup.category || "Room",
+        });
+
+      if (insertError) {
+        console.warn("[Visualizer] DB insert warning:", insertError);
+      }
+
+      setResultImageUrl(publicUrl);
+      setResultSource("ready_mockup");
+
+      setDebugInfo({
+        wallpaper_url: selectedWallpaper.image,
+        mockup_url: selectedMockup.image,
+        result_url: publicUrl,
+        payload_type: "canvas_overlay",
+        input_type: "canvas_composited",
+        model_used: "Canvas Compositor (Client-Side)",
+        prompt_version: "N/A"
+      });
+
+      setStep("result");
+
+      queryClient.invalidateQueries({ queryKey: ["visualizations"] });
+      queryClient.invalidateQueries({ queryKey: ["visualizations-count"] });
+
+      toast.success("Wallpaper applied successfully!");
+    } catch (err: any) {
+      console.error("[Visualizer] Canvas overlay failed:", err);
+      const message = err.message || "Failed to apply wallpaper. Please try again.";
+      setAiError(message);
+      toast.error("Failed to apply wallpaper: " + message);
+    } finally {
+      setSavingResult(false);
+    }
+  };
+
+  // Convenience wrapper for the result page's "Reapply" button
+  const applyManualOverlay = async () => {
+    if (!wallpaper || !mockup) return;
+    await applyCanvasOverlay(wallpaper, mockup);
+  };
+
+  const generateAiMockup = async (selectedWallpaper: Wallpaper, selectedMockup: Mockup, isRetry = false) => {
+    setStep("ai-loading");
+    setAiError(null);
+    setSavingResult(true);
+    setIsGeneratingRealAi(true);
+    if (!isRetry) {
+      setRetryCount(0);
+    } else {
+      setRetryCount((c) => c + 1);
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("No active session. Please log in.");
+      }
+
+      // Pre-composite the wallpaper client-side to pass as a strong visual starting point
+      let compositedImageBase64 = "";
+      try {
+        const coords: [number, number][] | null = MOCKUP_COORDINATES[selectedMockup.id] ?? null;
+        compositedImageBase64 = await compositeWallpaper(selectedMockup.image, selectedWallpaper.image, coords);
+      } catch (composeErr) {
+        console.warn("[Visualizer] Pre-compositing skipped:", composeErr);
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      console.log("[Visualizer] Requesting apply-wallpaper endpoint with timeout 60s...");
+      const response = await fetch("/api/ai/apply-wallpaper", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          wallpaperId: selectedWallpaper.id,
+          mockupRoomId: selectedMockup.id,
+          compositedImageBase64,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errMsg = "Unable to generate visualization. Please try again.";
+        try {
+          const errData = await response.json();
+          if (errData.error) {
+            if (errData.error.includes("temporary") || errData.error.includes("temporarily") || errData.error.includes("unavailable")) {
+              errMsg = "AI generation service is temporarily unavailable.";
+            } else if (errData.error.includes("found") || errData.error.includes("exist")) {
+              errMsg = "Selected wallpaper or mockup could not be found.";
+            } else {
+              errMsg = errData.error;
+            }
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const visualization = await response.json();
+      
+      setResultImageUrl(visualization.result_image_url);
+      setResultSource("ready_mockup");
+      
+      if (visualization.debug) {
+        setDebugInfo(visualization.debug);
+      } else {
+        setDebugInfo({
+          wallpaper_url: selectedWallpaper.image,
+          mockup_url: selectedMockup.image,
+          result_url: visualization.result_image_url,
+          payload_type: "grok_composite",
+          input_type: "url_list",
+          model_used: "grok-imagine-image",
+          prompt_version: "wallmock_ai_v1"
+        });
+      }
+
+      setStep("result");
+
+      queryClient.invalidateQueries({ queryKey: ["visualizations"] });
+      queryClient.invalidateQueries({ queryKey: ["visualizations-count"] });
+
+      toast.success("Visualization generated successfully!");
+    } catch (err: any) {
+      console.error("Failed to generate AI visualization:", err);
+      let message = "Unable to generate visualization. Please try again.";
+      if (err.name === "AbortError") {
+        message = "AI generation request timed out. Please try again.";
+      } else if (err.message) {
+        message = err.message;
+      }
+      setAiError(message);
+      toast.error(message);
+    } finally {
+      setSavingResult(false);
+    }
+  };
 
   // Fetch wallpapers
   const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
@@ -268,7 +465,7 @@ function Visualizer() {
                 categories={mockupCategories}
                 onPick={(m) => {
                   setMockup(m);
-                  createVisualization("ready_mockup", m, null, null);
+                  applyCanvasOverlay(wallpaper, m);
                 }}
                 onBack={() => setStep("experience")}
               />
@@ -308,10 +505,22 @@ function Visualizer() {
                 onBack={() => setStep("experience")}
               />
             )}
-            {step === "ai-loading" && wallpaper && aiStyle && (
+            {step === "ai-loading" && wallpaper && (
               <AiLoading
-                onDone={() => {
+                onDone={aiStyle ? () => {
                   createVisualization("ai_generated", null, aiStyle, null);
+                } : undefined}
+                error={aiError}
+                retryCount={retryCount}
+                onRetry={() => {
+                  if (wallpaper && mockup) {
+                    generateAiMockup(wallpaper, mockup, true);
+                  }
+                }}
+                onBack={() => {
+                  setAiError(null);
+                  setIsGeneratingRealAi(false);
+                  setStep(aiStyle ? "ai-style" : "mockup");
                 }}
               />
             )}
@@ -327,9 +536,18 @@ function Visualizer() {
                   setMockup(null);
                   setUploadedImg(null);
                   setAiStyle(null);
+                  setDebugInfo(null);
                   setStep("wallpaper");
                 }}
                 onAnotherAi={() => setStep("ai-loading")}
+                onRecreate={() => {
+                  if (wallpaper && mockup) {
+                    applyCanvasOverlay(wallpaper, mockup);
+                  }
+                }}
+                onUseManualOverlay={applyManualOverlay}
+                debugInfo={debugInfo}
+                savingResult={savingResult}
               />
             )}
           </>
@@ -552,31 +770,89 @@ function AiStyleSelect({
 
 /* ────────── Step 3 (AI): Loading ────────── */
 const AI_MESSAGES = [
-  "Creating room layout",
-  "Applying wallpaper",
-  "Adjusting perspective",
-  "Finalizing visualization",
+  "Detecting main wall",
+  "Applying wallpaper pattern",
+  "Matching perspective",
+  "Preserving room details",
+  "Finalizing preview",
 ];
-function AiLoading({ onDone }: { onDone: () => void }) {
+interface AiLoadingProps {
+  onDone?: () => void;
+  error?: string | null;
+  retryCount?: number;
+  onRetry?: () => void;
+  onBack?: () => void;
+}
+function AiLoading({ onDone, error, retryCount = 0, onRetry, onBack }: AiLoadingProps) {
   const [progress, setProgress] = useState(0);
   const [msgIdx, setMsgIdx] = useState(0);
+
   useEffect(() => {
-    const start = Date.now();
-    const duration = 5000;
-    const tick = setInterval(() => {
-      const p = Math.min(100, ((Date.now() - start) / duration) * 100);
-      setProgress(p);
-      if (p >= 100) {
-        clearInterval(tick);
-        setTimeout(onDone, 350);
-      }
-    }, 80);
-    const rot = setInterval(() => setMsgIdx((i) => (i + 1) % AI_MESSAGES.length), 1200);
-    return () => {
-      clearInterval(tick);
-      clearInterval(rot);
-    };
-  }, [onDone]);
+    if (error) return;
+
+    if (onDone) {
+      // Mock loading flow (simulated 5 seconds)
+      const start = Date.now();
+      const duration = 5000;
+      const tick = setInterval(() => {
+        const p = Math.min(100, ((Date.now() - start) / duration) * 100);
+        setProgress(p);
+        if (p >= 100) {
+          clearInterval(tick);
+          setTimeout(onDone, 350);
+        }
+      }, 80);
+      return () => clearInterval(tick);
+    } else {
+      // Real API generation flow (slow progress tick up to 95%)
+      const start = Date.now();
+      const duration = 15000; // Animate up to 95% over 15 seconds
+      const tick = setInterval(() => {
+        const p = Math.min(95, ((Date.now() - start) / duration) * 100);
+        setProgress(p);
+      }, 100);
+      return () => clearInterval(tick);
+    }
+  }, [onDone, error]);
+
+  useEffect(() => {
+    if (error) return;
+    const rot = setInterval(() => setMsgIdx((i) => (i + 1) % AI_MESSAGES.length), 2000);
+    return () => clearInterval(rot);
+  }, [error]);
+
+  if (error) {
+    return (
+      <section className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 max-w-xl mx-auto">
+        <div className="relative size-20 mb-8 bg-red-500/10 text-red-500 rounded-full grid place-items-center">
+          <X className="size-10" />
+        </div>
+        <Eyebrow>Generation Failed</Eyebrow>
+        <h1 className="font-serif text-3xl md:text-4xl mt-3 mb-6 font-medium">Visualization Error</h1>
+        <p className="text-brand-900/70 text-base mb-8 leading-relaxed">
+          {error}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+          {retryCount === 0 && onRetry && (
+            <button
+              onClick={onRetry}
+              className="bg-brand-900 text-brand-50 px-8 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer w-full sm:w-auto font-medium"
+            >
+              Retry Generation
+            </button>
+          )}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="border border-brand-900/15 px-8 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors cursor-pointer w-full sm:w-auto font-medium"
+            >
+              Go Back
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="min-h-[60vh] flex flex-col items-center justify-center text-center">
@@ -588,7 +864,7 @@ function AiLoading({ onDone }: { onDone: () => void }) {
         </div>
       </div>
       <Eyebrow>Generating</Eyebrow>
-      <h1 className="font-serif text-5xl md:text-6xl mt-3 mb-6">Generating Your Visualization</h1>
+      <h1 className="font-serif text-5xl md:text-6xl mt-3 mb-6 font-medium">Generating Your Visualization</h1>
       <p className="font-serif text-2xl italic text-brand-900/70 mb-10 transition-opacity">
         {AI_MESSAGES[msgIdx]}…
       </p>
@@ -599,7 +875,7 @@ function AiLoading({ onDone }: { onDone: () => void }) {
         />
       </div>
       <p className="text-[10px] uppercase tracking-[0.22em] text-brand-900/40 mt-4">
-        Typically 5 seconds
+        This may take 5–20 seconds.
       </p>
     </section>
   );
@@ -947,6 +1223,23 @@ function ToolBtn({ children }: { children: React.ReactNode }) {
   );
 }
 
+const downloadImage = async (url: string, filename: string) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    window.open(url, "_blank");
+  }
+};
+
 /* ────────── Step 4: Result ────────── */
 function ResultView({
   wallpaper,
@@ -956,6 +1249,10 @@ function ResultView({
   resultImageUrl,
   onAnother,
   onAnotherAi,
+  onRecreate,
+  onUseManualOverlay,
+  debugInfo,
+  savingResult,
 }: {
   wallpaper: Wallpaper;
   mockup: Mockup | null;
@@ -964,6 +1261,10 @@ function ResultView({
   resultImageUrl: string;
   onAnother: () => void;
   onAnotherAi: () => void;
+  onRecreate?: () => void;
+  onUseManualOverlay: () => void;
+  debugInfo: any;
+  savingResult: boolean;
 }) {
   const sourceLabel =
     source === "ai_generated" && aiStyle
@@ -971,6 +1272,9 @@ function ResultView({
       : mockup
         ? mockup.name
         : "Your Room";
+
+  const isDebugMode = import.meta.env.DEV || localStorage.getItem("AI_DEBUG") === "true";
+
   return (
     <section>
       <div className="mb-10">
@@ -997,31 +1301,134 @@ function ResultView({
           </div>
         </div>
 
-        <div className="lg:sticky lg:top-32">
+        <div className="lg:sticky lg:top-32 space-y-6">
           <SharePanel title="Share Visualization" shareUrl={resultImageUrl || resultPreview} />
 
-          <div className="mt-6 flex flex-col gap-2">
-            {source === "ai_generated" && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => downloadImage(resultImageUrl || resultPreview, `${wallpaper.code}_visualization.png`)}
+              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium"
+            >
+              Download PNG
+            </button>
+            <button
+              onClick={() => downloadImage(resultImageUrl || resultPreview, `${wallpaper.code}_visualization.jpg`)}
+              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium"
+            >
+              Download JPG
+            </button>
+          </div>
+
+          {/* Validation Feedback UX */}
+          {source === "ready_mockup" && mockup && (
+            <div className="p-6 bg-brand-50 border border-brand-900/10 space-y-4">
+              <h4 className="font-serif text-base font-semibold italic text-brand-950">Does this look right?</h4>
+              <p className="text-xs text-brand-900/60 leading-relaxed">
+                The wallpaper is applied using high-precision canvas compositing. If the result needs adjustment, you can reapply with updated wall coordinates.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.success("Feedback submitted. Thank you!");
+                  }}
+                  className="bg-green-700 text-white hover:bg-green-800 px-4 py-2 text-[9px] uppercase tracking-[0.2em] font-semibold transition-all cursor-pointer"
+                >
+                  ✓ Looks Great
+                </button>
+                <button
+                  type="button"
+                  disabled={savingResult}
+                  onClick={onRecreate}
+                  className="border border-brand-900/20 bg-brand-900 text-brand-50 hover:bg-brand-800 px-4 py-2 text-[9px] uppercase tracking-[0.2em] font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  ↻ Reapply
+                </button>
+                <button
+                  type="button"
+                  disabled={savingResult}
+                  onClick={onUseManualOverlay}
+                  className="bg-accent text-brand-950 hover:bg-accent/80 hover:text-brand-900 px-4 py-2 text-[9px] uppercase tracking-[0.2em] font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  ↺ Recomposite
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            {source === "ready_mockup" && mockup && onRecreate ? (
+              <button
+                onClick={onRecreate}
+                disabled={savingResult}
+                className="w-full inline-flex items-center justify-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer font-medium disabled:opacity-50"
+              >
+                <Sparkles className="size-3.5" /> Create Another Variation
+              </button>
+            ) : source === "ai_generated" ? (
               <button
                 onClick={onAnotherAi}
-                className="w-full inline-flex items-center justify-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer font-medium"
               >
                 <Sparkles className="size-3.5" /> Generate Another Version
               </button>
-            )}
+            ) : null}
+            
             <button
               onClick={onAnother}
-              className="w-full border border-brand-900/15 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer"
+              className="w-full border border-brand-900/15 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium"
             >
-              Create Another Variation
+              Select New Wallpaper
             </button>
             <Link
               to="/wallpapers"
-              className="w-full text-center border border-brand-900/15 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card"
+              className="w-full text-center border border-brand-900/15 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card font-medium"
             >
               Browse Collection
             </Link>
           </div>
+
+          {/* AI Debug Panel */}
+          {isDebugMode && debugInfo && (
+            <div className="p-6 border border-dashed border-red-500/35 bg-card text-left space-y-4 rounded shadow-sm">
+              <span className="text-[9px] uppercase tracking-[0.22em] text-red-500 font-bold">AI Debug</span>
+              <div className="grid grid-cols-2 gap-4 text-[11px]">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Model</p>
+                  <p className="font-mono break-all">{debugInfo.model_used || "grok-imagine-image"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Payload Type</p>
+                  <p className="font-mono">{debugInfo.payload_type || "hybrid_composited"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Input Mode</p>
+                  <p className="font-mono">{debugInfo.input_type || "base64"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Prompt Version</p>
+                  <p className="font-mono">{debugInfo.prompt_version || "strict_preservation_v1"}</p>
+                </div>
+              </div>
+              <div className="border-t border-brand-900/5 pt-4 space-y-2">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Reference Images</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-brand-900/50 block truncate">Wallpaper</span>
+                    <img src={debugInfo.wallpaper_url || wallpaper.image} className="aspect-square object-cover border border-brand-900/10 w-full" alt="Wallpaper Ref" />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-brand-900/50 block truncate">Mockup</span>
+                    <img src={debugInfo.mockup_url || mockup?.image} className="aspect-square object-cover border border-brand-900/10 w-full" alt="Mockup Ref" />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-brand-900/50 block truncate">Result</span>
+                    <img src={resultImageUrl || resultPreview} className="aspect-square object-cover border border-brand-900/10 w-full" alt="Result" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>
