@@ -34,6 +34,17 @@ function AddWallpaper() {
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Check for preloaded image from tools (like the image crop tool)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.preloadedWallpaperImage) {
+      setImgFile(window.preloadedWallpaperImage.file);
+      setImgPreview(window.preloadedWallpaperImage.preview);
+      // Clean up to prevent reloading it if the user leaves and returns
+      delete window.preloadedWallpaperImage;
+      toast.success("Preloaded cropped image loaded successfully");
+    }
+  }, []);
+
   // If editing, fetch existing wallpaper details
   useEffect(() => {
     if (id) {
