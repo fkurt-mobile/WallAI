@@ -10,10 +10,10 @@ export function useProfile() {
         throw new Error("Not authenticated");
       }
 
-      // Fetch profile
+      // Fetch profile with company info
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("id, company_id, full_name, role")
+        .select("id, company_id, full_name, role, companies(name, slug), created_at")
         .eq("id", user.id)
         .single();
 
@@ -21,7 +21,11 @@ export function useProfile() {
         throw error;
       }
 
-      return profile;
+      return {
+        ...profile,
+        email: user.email,
+      };
     },
   });
 }
+
