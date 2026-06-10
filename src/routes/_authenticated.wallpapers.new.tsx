@@ -38,11 +38,7 @@ function AddWallpaper() {
   useEffect(() => {
     if (id) {
       const fetchWallpaper = async () => {
-        const { data, error } = await supabase
-          .from("wallpapers")
-          .select("*")
-          .eq("id", id)
-          .single();
+        const { data, error } = await supabase.from("wallpapers").select("*").eq("id", id).single();
 
         if (error) {
           toast.error("Failed to load wallpaper: " + error.message);
@@ -75,6 +71,10 @@ function AddWallpaper() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!profile?.id) {
+      toast.error("You must be logged in to save wallpapers.");
+      return;
+    }
     if (!companyId) {
       toast.error("You must belong to a company to save wallpapers.");
       return;
@@ -104,7 +104,7 @@ function AddWallpaper() {
       if (imgFile) {
         const fileExt = imgFile.name.split(".").pop();
         const fileName = `${companyId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        
+
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("wallpaper-images")
           .upload(fileName, imgFile, {
@@ -140,15 +140,14 @@ function AddWallpaper() {
         toast.success("Wallpaper updated successfully");
       } else {
         // Create mode
-        const { error: dbError } = await supabase
-          .from("wallpapers")
-          .insert({
-            company_id: companyId,
-            product_code: productCode.trim(),
-            title: title.trim(),
-            category: category.trim(),
-            image_url: imageUrl,
-          });
+        const { error: dbError } = await supabase.from("wallpapers").insert({
+          company_id: companyId,
+          user_id: profile.id,
+          product_code: productCode.trim(),
+          title: title.trim(),
+          category: category.trim(),
+          image_url: imageUrl,
+        });
 
         if (dbError) throw dbError;
         toast.success("Wallpaper created successfully");
@@ -158,7 +157,7 @@ function AddWallpaper() {
       queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
-      
+
       navigate({ to: "/wallpapers" });
     } catch (err: any) {
       toast.error("Failed to save wallpaper: " + err.message);
@@ -176,9 +175,7 @@ function AddWallpaper() {
         >
           ← Back to collection
         </Link>
-        <h1 className="font-serif text-5xl mt-6 mb-2">
-          {id ? "Edit Wallpaper" : "Add Wallpaper"}
-        </h1>
+        <h1 className="font-serif text-5xl mt-6 mb-2">{id ? "Edit Wallpaper" : "Add Wallpaper"}</h1>
         <p className="text-sm text-brand-900/55 mb-12">
           {id
             ? "Update your wallpaper pattern details and file information."
@@ -217,9 +214,7 @@ function AddWallpaper() {
                   <p className="font-serif text-xl italic text-brand-900/80 mb-1">
                     Drop wallpaper image here
                   </p>
-                  <p className="text-[11px] text-brand-900/40 mb-6">
-                    PNG or JPG up to 20MB
-                  </p>
+                  <p className="text-[11px] text-brand-900/40 mb-6">PNG or JPG up to 20MB</p>
                   <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
@@ -238,19 +233,15 @@ function AddWallpaper() {
               ) : (
                 <div className="space-y-4">
                   <div className="relative bg-card border border-brand-900/8 aspect-[4/3] flex items-center justify-center overflow-hidden">
-                    <img
-                      src={imgPreview}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={imgPreview} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex items-center justify-between border border-brand-900/8 bg-card px-4 py-3">
                     <span className="text-xs font-mono text-brand-900/60 truncate max-w-[65%]">
                       {imgFile
                         ? imgFile.name
                         : id
-                        ? "current-wallpaper-image.jpg"
-                        : "wallpaper-image.jpg"}
+                          ? "current-wallpaper-image.jpg"
+                          : "wallpaper-image.jpg"}
                     </span>
                     <button
                       type="button"
@@ -275,7 +266,8 @@ function AddWallpaper() {
             <div className="md:col-span-6 lg:col-span-7 space-y-8">
               <label className="block">
                 <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-2 block">
-                  Product Code <span className="text-destructive font-sans font-medium text-xs">*</span>
+                  Product Code{" "}
+                  <span className="text-destructive font-sans font-medium text-xs">*</span>
                 </span>
                 <input
                   value={productCode}

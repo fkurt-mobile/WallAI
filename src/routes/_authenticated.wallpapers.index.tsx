@@ -30,19 +30,19 @@ function WallpaperList() {
 
   // Query real wallpapers from database
   const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["wallpapers", companyId],
+    queryKey: ["wallpapers", profile?.id],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!profile?.id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("company_id", companyId)
+        .eq("user_id", profile.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;
     },
-    enabled: !!companyId,
+    enabled: !!profile?.id,
   });
 
   const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({
@@ -55,17 +55,18 @@ function WallpaperList() {
   }));
 
   const handleDelete = async (id: string, imageUrl: string) => {
-    if (!confirm("Are you sure you want to delete this wallpaper? This will also remove any related visualizations.")) {
+    if (
+      !confirm(
+        "Are you sure you want to delete this wallpaper? This will also remove any related visualizations.",
+      )
+    ) {
       return;
     }
 
     try {
       // 1. Delete database record (cascades or set null on visualizations depending on schema, we set null or cascade)
-      const { error: dbError } = await supabase
-        .from("wallpapers")
-        .delete()
-        .eq("id", id);
-      
+      const { error: dbError } = await supabase.from("wallpapers").delete().eq("id", id);
+
       if (dbError) throw dbError;
 
       // 2. Delete storage file if it exists in Supabase Storage
@@ -181,11 +182,7 @@ function WallpaperList() {
                   <CardAction label="Edit" to="/wallpapers/new" search={{ id: w.id }}>
                     <Pencil className="size-3.5" />
                   </CardAction>
-                  <CardAction
-                    label="Delete"
-                    onClick={() => handleDelete(w.id, w.image)}
-                    danger
-                  >
+                  <CardAction label="Delete" onClick={() => handleDelete(w.id, w.image)} danger>
                     <Trash2 className="size-3.5" />
                   </CardAction>
                 </div>

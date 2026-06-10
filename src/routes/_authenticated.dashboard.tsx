@@ -20,32 +20,32 @@ function Dashboard() {
 
   // Fetch wallpapers count
   const { data: wallpapersCount = 0 } = useQuery({
-    queryKey: ["wallpapers-count", companyId],
+    queryKey: ["wallpapers-count", profile?.id],
     queryFn: async () => {
-      if (!companyId) return 0;
+      if (!profile?.id) return 0;
       const { count, error } = await supabase
         .from("wallpapers")
         .select("*", { count: "exact", head: true })
-        .eq("company_id", companyId);
+        .eq("user_id", profile.id);
       if (error) throw error;
       return count || 0;
     },
-    enabled: !!companyId,
+    enabled: !!profile?.id,
   });
 
   // Fetch visualizations count
   const { data: visualizationsCount = 0 } = useQuery({
-    queryKey: ["visualizations-count", companyId],
+    queryKey: ["visualizations-count", profile?.id],
     queryFn: async () => {
-      if (!companyId) return 0;
+      if (!profile?.id) return 0;
       const { count, error } = await supabase
         .from("visualizations")
         .select("*", { count: "exact", head: true })
-        .eq("company_id", companyId);
+        .eq("user_id", profile.id);
       if (error) throw error;
       return count || 0;
     },
-    enabled: !!companyId,
+    enabled: !!profile?.id,
   });
 
   // Fetch active mockup rooms count
@@ -63,19 +63,19 @@ function Dashboard() {
 
   // Fetch recently added wallpapers
   const { data: recentWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["recent-wallpapers", companyId],
+    queryKey: ["recent-wallpapers", profile?.id],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!profile?.id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("company_id", companyId)
+        .eq("user_id", profile.id)
         .order("created_at", { ascending: false })
         .limit(6);
       if (error) throw error;
       return data;
     },
-    enabled: !!companyId,
+    enabled: !!profile?.id,
   });
 
   const isLoading = profileLoading || wallpapersLoading;
@@ -86,7 +86,9 @@ function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
           <div>
             <span className="text-[11px] uppercase tracking-[0.2em] text-accent font-medium">
-              {isLoading ? "Loading..." : `Welcome back, ${profile?.full_name || profile?.email || "User"}`}
+              {isLoading
+                ? "Loading..."
+                : `Welcome back, ${profile?.full_name || profile?.email || "User"}`}
             </span>
             <h1 className="font-serif text-5xl md:text-6xl mt-3">Your studio.</h1>
           </div>
@@ -108,7 +110,10 @@ function Dashboard() {
 
         <div className="grid sm:grid-cols-3 gap-px bg-brand-900/5 mb-16">
           <Stat label="Wallpapers in catalog" value={isLoading ? "..." : String(wallpapersCount)} />
-          <Stat label="Visualizations this month" value={isLoading ? "..." : String(visualizationsCount)} />
+          <Stat
+            label="Visualizations this month"
+            value={isLoading ? "..." : String(visualizationsCount)}
+          />
           <Stat label="Active mockup rooms" value={isLoading ? "..." : String(mockupsCount)} />
         </div>
 
@@ -121,10 +126,12 @@ function Dashboard() {
             View all →
           </Link>
         </div>
-        
+
         {recentWallpapers.length === 0 ? (
           <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
-            <p className="text-brand-900/50 font-serif text-xl italic mb-4">No wallpapers in your catalog yet</p>
+            <p className="text-brand-900/50 font-serif text-xl italic mb-4">
+              No wallpapers in your catalog yet
+            </p>
             <Link
               to="/wallpapers/new"
               className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
@@ -162,4 +169,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

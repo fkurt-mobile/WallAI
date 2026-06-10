@@ -60,27 +60,24 @@ function Visualizer() {
 
   // Fetch wallpapers
   const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["wallpapers", companyId],
+    queryKey: ["wallpapers", profile?.id],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!profile?.id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("company_id", companyId);
+        .eq("user_id", profile.id);
       if (error) throw error;
       return data;
     },
-    enabled: !!companyId,
+    enabled: !!profile?.id,
   });
 
   // Fetch mockup rooms
   const { data: dbMockups = [], isLoading: mockupsLoading } = useQuery({
     queryKey: ["mockup_rooms_list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mockup_rooms")
-        .select("*")
-        .eq("is_active", true);
+      const { data, error } = await supabase.from("mockup_rooms").select("*").eq("is_active", true);
       if (error) throw error;
       return data;
     },
@@ -134,7 +131,7 @@ function Visualizer() {
     style: AiStyle | null,
     userImage: string | null,
   ) => {
-    if (!companyId || !wallpaper) return;
+    if (!profile?.id || !companyId || !wallpaper) return;
     setSavingResult(true);
 
     try {
@@ -162,9 +159,7 @@ function Visualizer() {
 
           if (uploadError) throw uploadError;
 
-          const { data } = supabase.storage
-            .from("visualization-results")
-            .getPublicUrl(fileName);
+          const { data } = supabase.storage.from("visualization-results").getPublicUrl(fileName);
           finalUrl = data.publicUrl;
         }
       } else if (source === "ai_generated" && style) {
@@ -177,11 +172,17 @@ function Visualizer() {
         .from("visualizations")
         .insert({
           company_id: companyId,
+          user_id: profile.id,
           wallpaper_id: wallpaper.id,
           mockup_room_id: source === "ready_mockup" && selectedMockup ? selectedMockup.id : null,
           source_type: source,
           result_image_url: finalUrl,
-          room_type: source === "ready_mockup" && selectedMockup ? selectedMockup.category : (style ? style.name.split(" ")[0] : "Room"),
+          room_type:
+            source === "ready_mockup" && selectedMockup
+              ? selectedMockup.category
+              : style
+                ? style.name.split(" ")[0]
+                : "Room",
         })
         .select()
         .single();
@@ -191,10 +192,10 @@ function Visualizer() {
       setResultImageUrl(finalUrl);
       setResultSource(source);
       setStep("result");
-      
+
       queryClient.invalidateQueries({ queryKey: ["visualizations"] });
       queryClient.invalidateQueries({ queryKey: ["visualizations-count"] });
-      
+
       toast.success("Visualization generated and saved!");
     } catch (err: any) {
       toast.error("Failed to generate visualization: " + err.message);
@@ -345,7 +346,9 @@ function SelectWallpaper({ wallpapers, onPick }: SelectWallpaperProps) {
       </p>
       {wallpapers.length === 0 ? (
         <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center max-w-xl">
-          <p className="text-brand-900/50 font-serif text-xl italic mb-4">No wallpapers available in catalog</p>
+          <p className="text-brand-900/50 font-serif text-xl italic mb-4">
+            No wallpapers available in catalog
+          </p>
           <Link
             to="/wallpapers/new"
             className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
@@ -356,7 +359,11 @@ function SelectWallpaper({ wallpapers, onPick }: SelectWallpaperProps) {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {wallpapers.map((w) => (
-            <button key={w.id} onClick={() => onPick(w)} className="group block text-left cursor-pointer">
+            <button
+              key={w.id}
+              onClick={() => onPick(w)}
+              className="group block text-left cursor-pointer"
+            >
               <div className="aspect-square overflow-hidden bg-brand-100">
                 <img
                   src={w.image}
@@ -975,7 +982,8 @@ function BackBtn({ onClick, className = "" }: { onClick: () => void; className?:
     <button
       onClick={onClick}
       className={
-        "text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent cursor-pointer " + className
+        "text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent cursor-pointer " +
+        className
       }
     >
       ← Back

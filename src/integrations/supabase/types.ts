@@ -11,19 +11,25 @@ export type Database = {
           id: string;
           name: string;
           slug: string;
+          subscription_plan: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           slug: string;
+          subscription_plan?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
           slug?: string;
+          subscription_plan?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -34,6 +40,7 @@ export type Database = {
           full_name: string | null;
           role: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id: string;
@@ -41,6 +48,7 @@ export type Database = {
           full_name?: string | null;
           role?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -48,6 +56,7 @@ export type Database = {
           full_name?: string | null;
           role?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Relationships: [
           {
@@ -63,6 +72,7 @@ export type Database = {
         Row: {
           id: string;
           company_id: string | null;
+          user_id: string | null;
           product_code: string;
           title: string;
           category: string;
@@ -73,6 +83,7 @@ export type Database = {
         Insert: {
           id?: string;
           company_id?: string | null;
+          user_id?: string | null;
           product_code: string;
           title: string;
           category: string;
@@ -83,6 +94,7 @@ export type Database = {
         Update: {
           id?: string;
           company_id?: string | null;
+          user_id?: string | null;
           product_code?: string;
           title?: string;
           category?: string;
@@ -134,6 +146,7 @@ export type Database = {
         Row: {
           id: string;
           company_id: string | null;
+          user_id: string | null;
           wallpaper_id: string | null;
           mockup_room_id: string | null;
           source_type: string;
@@ -144,6 +157,7 @@ export type Database = {
         Insert: {
           id?: string;
           company_id?: string | null;
+          user_id?: string | null;
           wallpaper_id?: string | null;
           mockup_room_id?: string | null;
           source_type: string;
@@ -154,6 +168,7 @@ export type Database = {
         Update: {
           id?: string;
           company_id?: string | null;
+          user_id?: string | null;
           wallpaper_id?: string | null;
           mockup_room_id?: string | null;
           source_type?: string;

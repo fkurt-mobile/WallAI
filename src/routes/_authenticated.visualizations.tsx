@@ -26,17 +26,17 @@ function VisualizationsPage() {
 
   // Query real visualizations from Supabase
   const { data: list = [], isLoading } = useQuery({
-    queryKey: ["visualizations", companyId],
+    queryKey: ["visualizations", profile?.id],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!profile?.id) return [];
       const { data, error } = await supabase
         .from("visualizations")
         .select("*, wallpapers(title)")
-        .eq("company_id", companyId)
+        .eq("user_id", profile.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      
+
       return data.map((v: any) => ({
         id: v.id,
         wallpaperId: v.wallpaper_id,

@@ -1,31 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { ProfileService } from "@/lib/services";
 
 export function useProfile() {
   return useQuery({
     queryKey: ["user-profile"],
-    queryFn: async () => {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        throw new Error("Not authenticated");
-      }
-
-      // Fetch profile with company info
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("id, company_id, full_name, role, companies(name, slug), created_at")
-        .eq("id", user.id)
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      return {
-        ...profile,
-        email: user.email,
-      };
-    },
+    queryFn: () => ProfileService.getCurrentProfile(),
   });
 }
-
