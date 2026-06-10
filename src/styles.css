@@ -114,37 +114,21 @@
   }
 }
 
-/* react-easy-crop custom overrides for Murra Studio */
-.reactEasyCrop_Container {
-  background-color: #111 !important;
-  border-radius: 0.375rem;
+/* react-image-crop custom overrides for Murra Studio */
+.ReactCrop__crop-selection {
+  border: 2px solid #d4a85f !important;
 }
 
-.reactEasyCrop_CropArea {
-  border: 1.5px solid var(--accent) !important;
-  color: var(--accent) !important;
-  box-shadow: 0 0 0 9999px rgba(17, 17, 17, 0.65) !important;
+.ReactCrop__drag-handle {
+  background-color: #d4a85f !important;
+  border: 1px solid #d4a85f !important;
+  width: 12px !important;
+  height: 12px !important;
 }
 
-/* L-shaped corner handles for the crop area to match premium editorial style */
-.reactEasyCrop_CropArea::before {
-  content: "";
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  right: -3px;
-  bottom: -3px;
-  background:
-    linear-gradient(to right, var(--accent) 12px, transparent 12px) 0 0,
-    linear-gradient(to bottom, var(--accent) 12px, transparent 12px) 0 0,
-    linear-gradient(to left, var(--accent) 12px, transparent 12px) 100% 0,
-    linear-gradient(to bottom, var(--accent) 12px, transparent 12px) 100% 0,
-    linear-gradient(to right, var(--accent) 12px, transparent 12px) 0 100%,
-    linear-gradient(to top, var(--accent) 12px, transparent 12px) 0 100%,
-    linear-gradient(to left, var(--accent) 12px, transparent 12px) 100% 100%,
-    linear-gradient(to top, var(--accent) 12px, transparent 12px) 100% 100%;
-  background-repeat: no-repeat;
-  background-size: 14px 14px;
-  pointer-events: none;
+.ReactCrop__rule-of-thirds-vt,
+.ReactCrop__rule-of-thirds-hz {
+  border-color: rgba(255, 255, 255, 0.45) !important;
 }
+
 

@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { Crop, Upload, ZoomIn, ZoomOut, RotateCcw, Download, Check, X, Trash2 } from "lucide-react";
-import Cropper from "react-easy-crop";
+import ReactCrop, { Crop as ReactCropType, PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { getCroppedImg, Area } from "@/utils/cropImage";
 import { toast } from "sonner";
 
@@ -31,7 +32,14 @@ declare global {
 function ImageCropTool() {
   const navigate = useNavigate();
   const [sourceImage, setSourceImage] = useState<string | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [crop, setCrop] = useState<ReactCropType>({
+    unit: "%",
+    x: 10,
+    y: 10,
+    width: 80,
+    height: 80,
+  });
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [croppedImages, setCroppedImages] = useState<CroppedImage[]>([]);
@@ -40,6 +48,7 @@ function ImageCropTool() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const imgRef = useRef<HTMLImageElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFiles(files: FileList | null) {
@@ -69,7 +78,15 @@ function ImageCropTool() {
     toast.success("Image uploaded");
 
     // Reset crop and zoom for the new image
-    setCrop({ x: 0, y: 0 });
+    setCrop({
+      unit: "%",
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+    });
+    setCompletedCrop(null);
+    setCroppedAreaPixels(null);
     setZoom(1);
 
     const reader = new FileReader();
@@ -78,6 +95,52 @@ function ImageCropTool() {
     };
     reader.readAsDataURL(file);
   }
+
+  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const { width, height, naturalWidth, naturalHeight } = e.currentTarget;
+
+    const initialCrop: ReactCropType = {
+      unit: "%",
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+    };
+    setCrop(initialCrop);
+
+    const pixelCrop: PixelCrop = {
+      unit: "px",
+      x: width * 0.1,
+      y: height * 0.1,
+      width: width * 0.8,
+      height: height * 0.8,
+    };
+    setCompletedCrop(pixelCrop);
+
+    setCroppedAreaPixels({
+      x: naturalWidth * 0.1,
+      y: naturalHeight * 0.1,
+      width: naturalWidth * 0.8,
+      height: naturalHeight * 0.8,
+    });
+  }
+
+  const handleCropComplete = (pixelCrop: PixelCrop) => {
+    setCompletedCrop(pixelCrop);
+
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const scaleX = img.naturalWidth / img.width;
+      const scaleY = img.naturalHeight / img.height;
+
+      setCroppedAreaPixels({
+        x: pixelCrop.x * scaleX,
+        y: pixelCrop.y * scaleY,
+        width: pixelCrop.width * scaleX,
+        height: pixelCrop.height * scaleY,
+      });
+    }
+  };
 
   const handleZoomIn = () => {
     setZoom((z) => Math.min(3, z + 0.25));
@@ -89,13 +152,41 @@ function ImageCropTool() {
 
   const handleReset = () => {
     setZoom(1);
-    setCrop({ x: 0, y: 0 });
+    setCrop({
+      unit: "%",
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+    });
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const pixelCrop: PixelCrop = {
+        unit: "px",
+        x: img.width * 0.1,
+        y: img.height * 0.1,
+        width: img.width * 0.8,
+        height: img.height * 0.8,
+      };
+      setCompletedCrop(pixelCrop);
+      setCroppedAreaPixels({
+        x: img.naturalWidth * 0.1,
+        y: img.naturalHeight * 0.1,
+        width: img.naturalWidth * 0.8,
+        height: img.naturalHeight * 0.8,
+      });
+    }
     toast.success("Zoom and crop selection reset");
   };
 
   const handleApplyCrop = async () => {
     if (!sourceImage || !croppedAreaPixels) {
       toast.error("Please upload an image first");
+      return;
+    }
+
+    if (croppedAreaPixels.width === 0 || croppedAreaPixels.height === 0) {
+      toast.error("Please select a crop area first.");
       return;
     }
 
@@ -185,12 +276,12 @@ function ImageCropTool() {
 
         <div className="grid lg:grid-cols-[1fr_300px] gap-6">
           {/* Workspace */}
-          <div className="bg-[#111] rounded-md min-h-[600px] flex items-center justify-center overflow-hidden relative border border-brand-900/10 shadow-inner">
+          <div className="w-full h-[600px] bg-[#f7f4ef] border border-[#e8e2d8] rounded-sm overflow-auto flex items-center justify-center relative p-6 shadow-inner">
             {!sourceImage ? (
-              <label className="cursor-pointer text-center text-brand-50/70 p-16 w-full h-full flex flex-col items-center justify-center">
+              <label className="cursor-pointer text-center text-brand-900/70 p-16 w-full h-full flex flex-col items-center justify-center">
                 <Upload className="size-10 mx-auto mb-5 opacity-60 text-accent" />
-                <p className="font-serif text-3xl italic text-brand-50">Drop an image to begin</p>
-                <p className="text-[11px] uppercase tracking-[0.2em] mt-3 text-brand-50/45">
+                <p className="font-serif text-3xl italic text-brand-900">Drop an image to begin</p>
+                <p className="text-[11px] uppercase tracking-[0.2em] mt-3 text-brand-900/45">
                   JPG · PNG · click to browse
                 </p>
                 <input
@@ -202,16 +293,34 @@ function ImageCropTool() {
                 />
               </label>
             ) : (
-              <div className="absolute inset-0">
-                <Cropper
-                  image={sourceImage}
+              <div
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "center center",
+                  transition: "transform 0.15s ease-out",
+                }}
+                className="relative max-w-full max-h-[70vh] flex items-center justify-center"
+              >
+                <ReactCrop
                   crop={crop}
-                  zoom={zoom}
+                  onChange={(c) => setCrop(c)}
+                  onComplete={handleCropComplete}
                   aspect={undefined}
-                  onCropChange={setCrop}
-                  onZoomChange={setZoom}
-                  onCropComplete={(_, croppedAreaPixels) => setCroppedAreaPixels(croppedAreaPixels)}
-                />
+                  className="max-w-full"
+                >
+                  <img
+                    ref={imgRef}
+                    src={sourceImage}
+                    onLoad={onImageLoad}
+                    alt="Source Crop"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "70vh",
+                      objectFit: "contain",
+                    }}
+                    className="pointer-events-auto select-none"
+                  />
+                </ReactCrop>
               </div>
             )}
           </div>
