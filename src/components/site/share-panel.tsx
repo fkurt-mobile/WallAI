@@ -9,6 +9,7 @@ import {
   Download,
   Link as LinkIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // Pinterest isn't in lucide; use inline SVG
 function PinIcon({ className }: { className?: string }) {
@@ -61,8 +62,36 @@ export function SharePanel({
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
+      toast.success("Link copied to clipboard");
     } catch {
-      // ignore
+      toast.error("Failed to copy link");
+    }
+  };
+
+  const downloadImage = async (format: "png" | "jpg") => {
+    try {
+      // Try fetching the image to download as blob
+      const res = await fetch(shareUrl, { mode: "cors" });
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `visualization-${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success(`Successfully downloaded ${format.toUpperCase()}`);
+    } catch (err) {
+      // Fallback: open in new tab if CORS blocks fetch
+      toast.info("Opening image in new tab for download...");
+      const a = document.createElement("a");
+      a.href = shareUrl;
+      a.target = "_blank";
+      a.download = `visualization.${format}`;
+      a.click();
     }
   };
 
@@ -120,13 +149,20 @@ export function SharePanel({
 
       <p className="text-[10px] uppercase tracking-[0.22em] text-brand-900/45 mb-3">Download</p>
       <div className="grid grid-cols-2 gap-2">
-        <button className="flex items-center justify-center gap-2 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-800 transition-colors cursor-pointer">
+        <button 
+          onClick={() => downloadImage("png")}
+          className="flex items-center justify-center gap-2 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-800 transition-colors cursor-pointer"
+        >
           <Download className="size-3.5" /> PNG
         </button>
-        <button className="flex items-center justify-center gap-2 border border-brand-900/15 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer">
+        <button 
+          onClick={() => downloadImage("jpg")}
+          className="flex items-center justify-center gap-2 border border-brand-900/15 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
+        >
           <Download className="size-3.5" /> JPG
         </button>
       </div>
     </div>
   );
 }
+

@@ -49,7 +49,7 @@ function Landing() {
             </p>
             <div className="flex flex-wrap gap-4">
               <Link
-                to="/visualizer"
+                to="/tools/wallpaper-visualizer"
                 className="bg-brand-900 text-brand-50 px-8 py-4 text-xs font-medium uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors shadow-xl"
               >
                 Open Visualizer

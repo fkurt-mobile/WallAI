@@ -1,29 +1,21 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { z } from "zod";
 import { AppShell } from "@/components/site/app-shell";
 import { WizardStepper } from "@/components/site/wizard-stepper";
 import { StickySelected } from "@/components/site/sticky-selected";
 import { SharePanel } from "@/components/site/share-panel";
-import {
-  wallpapers,
-  mockups,
-  mockupCategories,
-  getWallpaper,
-  type Wallpaper,
-  type Mockup,
-} from "@/lib/wallpapers/data";
+import { type Wallpaper, type Mockup } from "@/lib/wallpapers/data";
 import resultPreview from "@/assets/result-preview.jpg";
-import mockupLiving from "@/assets/mockup-living.jpg";
-import mockupBedroom from "@/assets/mockup-bedroom.jpg";
-import mockupOffice from "@/assets/mockup-office.jpg";
-import mockupCafe from "@/assets/mockup-cafe.jpg";
-import mockupRestaurant from "@/assets/mockup-restaurant.jpg";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Upload, X, ImagePlus, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useProfile } from "@/hooks/use-profile";
+import { toast } from "sonner";
 
 const searchSchema = z.object({ wallpaper: z.string().optional() });
 
-export const Route = createFileRoute("/_authenticated/visualizer")({
+export const Route = createFileRoute("/_authenticated/tools/wallpaper-visualizer")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
@@ -47,17 +39,169 @@ type Step =
   | "ai-style"
   | "ai-loading"
   | "result";
-type ResultSource = "mockup" | "upload" | "ai";
+
+type ResultSource = "ready_mockup" | "uploaded_room" | "ai_generated";
 
 function Visualizer() {
   const search = Route.useSearch();
-  const initial = search.wallpaper ? (getWallpaper(search.wallpaper) ?? null) : null;
-  const [wallpaper, setWallpaper] = useState<Wallpaper | null>(initial);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
+  const companyId = profile?.company_id;
+
+  const [wallpaper, setWallpaper] = useState<Wallpaper | null>(null);
   const [mockup, setMockup] = useState<Mockup | null>(null);
-  const [step, setStep] = useState<Step>(initial ? "experience" : "wallpaper");
+  const [step, setStep] = useState<Step>("wallpaper");
   const [uploadedImg, setUploadedImg] = useState<string | null>(null);
   const [aiStyle, setAiStyle] = useState<AiStyle | null>(null);
-  const [resultSource, setResultSource] = useState<ResultSource>("mockup");
+  const [resultSource, setResultSource] = useState<ResultSource>("ready_mockup");
+  const [savingResult, setSavingResult] = useState(false);
+  const [resultImageUrl, setResultImageUrl] = useState<string>("");
+
+  // Fetch wallpapers
+  const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
+    queryKey: ["wallpapers", companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from("wallpapers")
+        .select("*")
+        .eq("company_id", companyId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId,
+  });
+
+  // Fetch mockup rooms
+  const { data: dbMockups = [], isLoading: mockupsLoading } = useQuery({
+    queryKey: ["mockup_rooms_list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("mockup_rooms")
+        .select("*")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({
+    id: w.id,
+    code: w.product_code,
+    title: w.title,
+    category: w.category,
+    image: w.image_url,
+    tint: "",
+  }));
+
+  const mockupsList: Mockup[] = dbMockups.map((m) => ({
+    id: m.id,
+    name: m.name,
+    category: m.category || "General",
+    image: m.image_url,
+  }));
+
+  const mockupCategories = ["All", ...Array.from(new Set(mockupsList.map((m) => m.category)))];
+
+  // Load wallpaper from query param if provided
+  useEffect(() => {
+    if (search.wallpaper && wallpapersList.length > 0) {
+      const selected = wallpapersList.find((w) => w.id === search.wallpaper);
+      if (selected) {
+        setWallpaper(selected);
+        setStep("experience");
+      }
+    }
+  }, [search.wallpaper, dbWallpapers]);
+
+  const helperDataURLtoFile = (dataurl: string, filename: string) => {
+    let arr = dataurl.split(","),
+      mime = arr[0].match(/:(.*?);/)![1],
+      bstr = atob(arr[1]),
+      n = bstr.length,
+      u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  };
+
+  // Create visualization record in Supabase
+  const createVisualization = async (
+    source: ResultSource,
+    selectedMockup: Mockup | null,
+    style: AiStyle | null,
+    userImage: string | null,
+  ) => {
+    if (!companyId || !wallpaper) return;
+    setSavingResult(true);
+
+    try {
+      let finalUrl = resultPreview; // Default fallback
+
+      if (source === "ready_mockup" && selectedMockup) {
+        // Use the mockup image directly (or simulate pattern application)
+        finalUrl = selectedMockup.image;
+      } else if (source === "uploaded_room" && userImage) {
+        // Upload user image to storage
+        const fileName = `${companyId}/${Date.now()}_user_room.jpg`;
+        let uploadFile: File;
+        if (userImage.startsWith("data:")) {
+          uploadFile = helperDataURLtoFile(userImage, "user_room.jpg");
+        } else {
+          // If it's already an uploaded file path, just use it
+          finalUrl = userImage;
+          uploadFile = null!;
+        }
+
+        if (uploadFile) {
+          const { error: uploadError } = await supabase.storage
+            .from("visualization-results")
+            .upload(fileName, uploadFile, { contentType: uploadFile.type });
+
+          if (uploadError) throw uploadError;
+
+          const { data } = supabase.storage
+            .from("visualization-results")
+            .getPublicUrl(fileName);
+          finalUrl = data.publicUrl;
+        }
+      } else if (source === "ai_generated" && style) {
+        // AI generated room (use style's image as preview result for MVP)
+        finalUrl = style.image;
+      }
+
+      // Save record to DB
+      const { data, error } = await supabase
+        .from("visualizations")
+        .insert({
+          company_id: companyId,
+          wallpaper_id: wallpaper.id,
+          mockup_room_id: source === "ready_mockup" && selectedMockup ? selectedMockup.id : null,
+          source_type: source,
+          result_image_url: finalUrl,
+          room_type: source === "ready_mockup" && selectedMockup ? selectedMockup.category : (style ? style.name.split(" ")[0] : "Room"),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setResultImageUrl(finalUrl);
+      setResultSource(source);
+      setStep("result");
+      
+      queryClient.invalidateQueries({ queryKey: ["visualizations"] });
+      queryClient.invalidateQueries({ queryKey: ["visualizations-count"] });
+      
+      toast.success("Visualization generated and saved!");
+    } catch (err: any) {
+      toast.error("Failed to generate visualization: " + err.message);
+    } finally {
+      setSavingResult(false);
+    }
+  };
 
   const wizardStep: 1 | 2 | 3 | 4 =
     step === "wallpaper"
@@ -67,6 +211,8 @@ function Visualizer() {
         : step === "detect" || step === "manual" || step === "ai-loading"
           ? 3
           : 4;
+
+  const isLoadingData = wallpapersLoading || mockupsLoading;
 
   return (
     <AppShell contentClassName="pb-32">
@@ -83,86 +229,98 @@ function Visualizer() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
-        {step === "wallpaper" && (
-          <SelectWallpaper
-            onPick={(w) => {
-              setWallpaper(w);
-              setStep("experience");
-            }}
-          />
-        )}
-        {step === "experience" && wallpaper && (
-          <ExperienceSelect
-            onMockup={() => setStep("mockup")}
-            onUpload={() => setStep("upload")}
-            onAi={() => setStep("ai-style")}
-            onBack={() => setStep("wallpaper")}
-          />
-        )}
-        {step === "mockup" && wallpaper && (
-          <MockupGallery
-            onPick={(m) => {
-              setMockup(m);
-              setResultSource("mockup");
-              setStep("result");
-            }}
-            onBack={() => setStep("experience")}
-          />
-        )}
-        {step === "upload" && wallpaper && (
-          <UploadRoom
-            uploadedImg={uploadedImg}
-            setUploadedImg={setUploadedImg}
-            onContinue={() => setStep("detect")}
-            onBack={() => setStep("experience")}
-          />
-        )}
-        {step === "detect" && wallpaper && uploadedImg && (
-          <WallDetect
-            img={uploadedImg}
-            onGood={() => {
-              setResultSource("upload");
-              setStep("result");
-            }}
-            onAdjust={() => setStep("manual")}
-            onBack={() => setStep("upload")}
-          />
-        )}
-        {step === "manual" && wallpaper && uploadedImg && (
-          <ManualEditor
-            img={uploadedImg}
-            onApply={() => {
-              setResultSource("upload");
-              setStep("result");
-            }}
-            onBack={() => setStep("detect")}
-          />
-        )}
-        {step === "ai-style" && wallpaper && (
-          <AiStyleSelect
-            selected={aiStyle}
-            onPick={(s) => setAiStyle(s)}
-            onContinue={() => setStep("ai-loading")}
-            onBack={() => setStep("experience")}
-          />
-        )}
-        {step === "ai-loading" && wallpaper && aiStyle && (
-          <AiLoading
-            onDone={() => {
-              setResultSource("ai");
-              setStep("result");
-            }}
-          />
-        )}
-        {step === "result" && wallpaper && (
-          <ResultView
-            wallpaper={wallpaper}
-            mockup={mockup}
-            source={resultSource}
-            aiStyle={aiStyle}
-            onAnother={() => setStep("wallpaper")}
-            onAnotherAi={() => setStep("ai-loading")}
-          />
+        {isLoadingData ? (
+          <p className="text-center font-serif text-2xl italic py-20">Loading Visualizer data...</p>
+        ) : (
+          <>
+            {step === "wallpaper" && (
+              <SelectWallpaper
+                wallpapers={wallpapersList}
+                onPick={(w) => {
+                  setWallpaper(w);
+                  setStep("experience");
+                }}
+              />
+            )}
+            {step === "experience" && wallpaper && (
+              <ExperienceSelect
+                onMockup={() => setStep("mockup")}
+                onUpload={() => setStep("upload")}
+                onAi={() => setStep("ai-style")}
+                onBack={() => setStep("wallpaper")}
+              />
+            )}
+            {step === "mockup" && wallpaper && (
+              <MockupGallery
+                mockups={mockupsList}
+                categories={mockupCategories}
+                onPick={(m) => {
+                  setMockup(m);
+                  createVisualization("ready_mockup", m, null, null);
+                }}
+                onBack={() => setStep("experience")}
+              />
+            )}
+            {step === "upload" && wallpaper && (
+              <UploadRoom
+                uploadedImg={uploadedImg}
+                setUploadedImg={setUploadedImg}
+                onContinue={() => setStep("detect")}
+                onBack={() => setStep("experience")}
+              />
+            )}
+            {step === "detect" && wallpaper && uploadedImg && (
+              <WallDetect
+                img={uploadedImg}
+                onGood={() => {
+                  createVisualization("uploaded_room", null, null, uploadedImg);
+                }}
+                onAdjust={() => setStep("manual")}
+                onBack={() => setStep("upload")}
+              />
+            )}
+            {step === "manual" && wallpaper && uploadedImg && (
+              <ManualEditor
+                img={uploadedImg}
+                onApply={() => {
+                  createVisualization("uploaded_room", null, null, uploadedImg);
+                }}
+                onBack={() => setStep("detect")}
+              />
+            )}
+            {step === "ai-style" && wallpaper && (
+              <AiStyleSelect
+                selected={aiStyle}
+                onPick={(s) => setAiStyle(s)}
+                onContinue={() => setStep("ai-loading")}
+                onBack={() => setStep("experience")}
+              />
+            )}
+            {step === "ai-loading" && wallpaper && aiStyle && (
+              <AiLoading
+                onDone={() => {
+                  createVisualization("ai_generated", null, aiStyle, null);
+                }}
+              />
+            )}
+            {step === "result" && wallpaper && (
+              <ResultView
+                wallpaper={wallpaper}
+                mockup={mockup}
+                source={resultSource}
+                aiStyle={aiStyle}
+                resultImageUrl={resultImageUrl}
+                onAnother={() => {
+                  setWallpaper(null);
+                  setMockup(null);
+                  setUploadedImg(null);
+                  setAiStyle(null);
+                  setStep("wallpaper");
+                }}
+                onAnotherAi={() => setStep("ai-loading")}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -172,31 +330,48 @@ function Visualizer() {
 }
 
 /* ────────── Step 1: Wallpaper ────────── */
-function SelectWallpaper({ onPick }: { onPick: (w: Wallpaper) => void }) {
+interface SelectWallpaperProps {
+  wallpapers: Wallpaper[];
+  onPick: (w: Wallpaper) => void;
+}
+
+function SelectWallpaper({ wallpapers, onPick }: SelectWallpaperProps) {
   return (
     <section>
       <Eyebrow>Step One</Eyebrow>
       <Heading>Choose a wallpaper.</Heading>
       <p className="text-brand-900/60 max-w-md mb-12">
-        Pick any pattern from the curated catalog to begin the visualization journey.
+        Pick any pattern from your company catalog to begin the visualization journey.
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-        {wallpapers.map((w) => (
-          <button key={w.id} onClick={() => onPick(w)} className="group block text-left">
-            <div className="aspect-square overflow-hidden">
-              <img
-                src={w.image}
-                alt={w.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              />
-            </div>
-            <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
-              {w.code}
-            </p>
-            <p className="text-sm font-medium">{w.title}</p>
-          </button>
-        ))}
-      </div>
+      {wallpapers.length === 0 ? (
+        <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center max-w-xl">
+          <p className="text-brand-900/50 font-serif text-xl italic mb-4">No wallpapers available in catalog</p>
+          <Link
+            to="/wallpapers/new"
+            className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
+          >
+            Upload Wallpaper First
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {wallpapers.map((w) => (
+            <button key={w.id} onClick={() => onPick(w)} className="group block text-left cursor-pointer">
+              <div className="aspect-square overflow-hidden bg-brand-100">
+                <img
+                  src={w.image}
+                  alt={w.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                />
+              </div>
+              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+                {w.code}
+              </p>
+              <p className="text-sm font-medium">{w.title}</p>
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -259,7 +434,7 @@ function ExperienceCard({
   return (
     <button
       onClick={onClick}
-      className="group text-left bg-card p-10 border border-brand-900/5 hover:border-accent transition-colors relative"
+      className="group text-left bg-card p-10 border border-brand-900/5 hover:border-accent transition-colors relative cursor-pointer"
     >
       {badge && (
         <span className="absolute top-5 right-5 inline-flex items-center gap-1 bg-accent/10 text-accent px-2.5 py-1 text-[9px] uppercase tracking-[0.18em] rounded-full">
@@ -283,15 +458,15 @@ interface AiStyle {
   image: string;
 }
 const aiStyles: AiStyle[] = [
-  { id: "modern-living", name: "Modern Living Room", image: mockupLiving },
-  { id: "luxury-living", name: "Luxury Living Room", image: mockupLiving },
-  { id: "scandi-living", name: "Scandinavian Living Room", image: mockupLiving },
-  { id: "min-bedroom", name: "Minimalist Bedroom", image: mockupBedroom },
-  { id: "lux-bedroom", name: "Luxury Bedroom", image: mockupBedroom },
-  { id: "office", name: "Home Office", image: mockupOffice },
-  { id: "cafe", name: "Cafe", image: mockupCafe },
-  { id: "restaurant", name: "Restaurant", image: mockupRestaurant },
-  { id: "hotel", name: "Hotel Suite", image: mockupBedroom },
+  { id: "modern-living", name: "Modern Living Room", image: "/src/assets/mockup-living.jpg" },
+  { id: "luxury-living", name: "Luxury Living Room", image: "/src/assets/mockup-living.jpg" },
+  { id: "scandi-living", name: "Scandinavian Living Room", image: "/src/assets/mockup-living.jpg" },
+  { id: "min-bedroom", name: "Minimalist Bedroom", image: "/src/assets/mockup-bedroom.jpg" },
+  { id: "lux-bedroom", name: "Luxury Bedroom", image: "/src/assets/mockup-bedroom.jpg" },
+  { id: "office", name: "Home Office", image: "/src/assets/mockup-office.jpg" },
+  { id: "cafe", name: "Cafe", image: "/src/assets/mockup-cafe.jpg" },
+  { id: "restaurant", name: "Restaurant", image: "/src/assets/mockup-restaurant.jpg" },
+  { id: "hotel", name: "Hotel Suite", image: "/src/assets/mockup-bedroom.jpg" },
 ];
 
 function AiStyleSelect({
@@ -320,7 +495,7 @@ function AiStyleSelect({
               key={s.id}
               onClick={() => onPick(s)}
               className={
-                "group text-left transition-all " +
+                "group text-left transition-all cursor-pointer " +
                 (active ? "outline outline-2 outline-accent outline-offset-4" : "")
               }
             >
@@ -369,7 +544,7 @@ function AiLoading({ onDone }: { onDone: () => void }) {
   const [msgIdx, setMsgIdx] = useState(0);
   useEffect(() => {
     const start = Date.now();
-    const duration = 8000;
+    const duration = 5000;
     const tick = setInterval(() => {
       const p = Math.min(100, ((Date.now() - start) / duration) * 100);
       setProgress(p);
@@ -378,7 +553,7 @@ function AiLoading({ onDone }: { onDone: () => void }) {
         setTimeout(onDone, 350);
       }
     }, 80);
-    const rot = setInterval(() => setMsgIdx((i) => (i + 1) % AI_MESSAGES.length), 1800);
+    const rot = setInterval(() => setMsgIdx((i) => (i + 1) % AI_MESSAGES.length), 1200);
     return () => {
       clearInterval(tick);
       clearInterval(rot);
@@ -406,14 +581,21 @@ function AiLoading({ onDone }: { onDone: () => void }) {
         />
       </div>
       <p className="text-[10px] uppercase tracking-[0.22em] text-brand-900/40 mt-4">
-        Typically 5–15 seconds
+        Typically 5 seconds
       </p>
     </section>
   );
 }
 
 /* ────────── Step 2b: Mockup Gallery ────────── */
-function MockupGallery({ onPick, onBack }: { onPick: (m: Mockup) => void; onBack: () => void }) {
+interface MockupGalleryProps {
+  mockups: Mockup[];
+  categories: string[];
+  onPick: (m: Mockup) => void;
+  onBack: () => void;
+}
+
+function MockupGallery({ mockups, categories, onPick, onBack }: MockupGalleryProps) {
   const [cat, setCat] = useState("All");
   const list = mockups.filter((m) => cat === "All" || m.category === cat);
   return (
@@ -421,12 +603,12 @@ function MockupGallery({ onPick, onBack }: { onPick: (m: Mockup) => void; onBack
       <Eyebrow>Step Two</Eyebrow>
       <Heading>Pick a room.</Heading>
       <div className="flex gap-1 mt-10 mb-10 overflow-x-auto border-b border-brand-900/5">
-        {mockupCategories.map((c) => (
+        {categories.map((c) => (
           <button
             key={c}
             onClick={() => setCat(c)}
             className={
-              "px-4 py-3 text-[11px] uppercase tracking-[0.2em] border-b-2 -mb-px " +
+              "px-4 py-3 text-[11px] uppercase tracking-[0.2em] border-b-2 -mb-px cursor-pointer " +
               (cat === c
                 ? "border-brand-900 text-brand-900"
                 : "border-transparent text-brand-900/50 hover:text-brand-900")
@@ -438,7 +620,7 @@ function MockupGallery({ onPick, onBack }: { onPick: (m: Mockup) => void; onBack
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {list.map((m) => (
-          <button key={m.id} onClick={() => onPick(m)} className="group text-left">
+          <button key={m.id} onClick={() => onPick(m)} className="group text-left cursor-pointer">
             <div className="aspect-[4/3] overflow-hidden">
               <img
                 src={m.image}
@@ -506,7 +688,7 @@ function UploadRoom({
             Drag & drop your photo
           </span>
           <span className="text-[11px] uppercase tracking-[0.2em] text-brand-900/30 mt-4">
-            or click to browse · JPG · PNG · HEIC
+            or click to browse · JPG · PNG
           </span>
           <input
             type="file"
@@ -525,13 +707,13 @@ function UploadRoom({
           <div className="flex gap-3">
             <button
               onClick={onContinue}
-              className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
+              className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
             >
               Continue → Wall Detection
             </button>
             <button
               onClick={() => setUploadedImg(null)}
-              className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card"
+              className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer"
             >
               Replace Photo
             </button>
@@ -580,13 +762,13 @@ function WallDetect({
       <div className="flex gap-3 mt-8">
         <button
           onClick={onGood}
-          className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800"
+          className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 cursor-pointer"
         >
           Looks Good
         </button>
         <button
           onClick={onAdjust}
-          className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card"
+          className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer"
         >
           Adjust Manually
         </button>
@@ -678,7 +860,7 @@ function ManualEditor({
       <div className="flex gap-3 mt-8">
         <button
           onClick={onApply}
-          className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800"
+          className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 cursor-pointer"
         >
           Apply Boundaries
         </button>
@@ -690,7 +872,7 @@ function ManualEditor({
 
 function ToolBtn({ children }: { children: React.ReactNode }) {
   return (
-    <button className="border border-brand-900/10 py-2 text-[11px] uppercase tracking-[0.2em] hover:border-accent hover:text-accent transition-colors">
+    <button className="border border-brand-900/10 py-2 text-[11px] uppercase tracking-[0.2em] hover:border-accent hover:text-accent transition-colors cursor-pointer">
       {children}
     </button>
   );
@@ -702,6 +884,7 @@ function ResultView({
   mockup,
   source,
   aiStyle,
+  resultImageUrl,
   onAnother,
   onAnotherAi,
 }: {
@@ -709,11 +892,12 @@ function ResultView({
   mockup: Mockup | null;
   source: ResultSource;
   aiStyle: AiStyle | null;
+  resultImageUrl: string;
   onAnother: () => void;
   onAnotherAi: () => void;
 }) {
   const sourceLabel =
-    source === "ai" && aiStyle
+    source === "ai_generated" && aiStyle
       ? `${aiStyle.name} · AI Generated`
       : mockup
         ? mockup.name
@@ -728,7 +912,7 @@ function ResultView({
       <div className="grid lg:grid-cols-[1fr_380px] gap-8 items-start">
         <div className="relative">
           <img
-            src={resultPreview}
+            src={resultImageUrl || resultPreview}
             alt="Final visualization"
             className="w-full max-h-[75vh] object-cover shadow-2xl outline-1 -outline-offset-1 outline-black/10"
           />
@@ -745,10 +929,10 @@ function ResultView({
         </div>
 
         <div className="lg:sticky lg:top-32">
-          <SharePanel title="Share Visualization" />
+          <SharePanel title="Share Visualization" shareUrl={resultImageUrl || resultPreview} />
 
           <div className="mt-6 flex flex-col gap-2">
-            {source === "ai" && (
+            {source === "ai_generated" && (
               <button
                 onClick={onAnotherAi}
                 className="w-full inline-flex items-center justify-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
@@ -791,7 +975,7 @@ function BackBtn({ onClick, className = "" }: { onClick: () => void; className?:
     <button
       onClick={onClick}
       className={
-        "text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent " + className
+        "text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent cursor-pointer " + className
       }
     >
       ← Back

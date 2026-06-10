@@ -1,39 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ZoomIn, Pencil, Trash2, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
-import { mockups, type Wallpaper } from "@/lib/wallpapers/data";
-import resultPreview from "@/assets/result-preview.jpg";
+import { type Wallpaper } from "@/lib/wallpapers/data";
 import { VisualizationPreviewModal, type VizPreview } from "./visualization-preview-modal";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   wallpaper: Wallpaper | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDelete?: (id: string, imageUrl: string) => void;
 }
 
-// Mock history: first 3 wallpapers have visualizations
-function getHistory(w: Wallpaper) {
-  const idx = parseInt(w.id.replace(/\D/g, ""), 10) || 0;
-  if (idx % 2 === 1) return [];
-  return mockups.slice(0, 4).map((m, i) => ({
-    id: `${w.id}-${m.id}`,
-    room: m.category,
-    image: i === 0 ? resultPreview : m.image,
-  }));
-}
-
-export function WallpaperModal({ wallpaper, open, onOpenChange }: Props) {
+export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Props) {
   const navigate = useNavigate();
   const [zoomed, setZoomed] = useState(false);
   const [preview, setPreview] = useState<VizPreview | null>(null);
 
+  useEffect(() => {
+    if (!open) {
+      setZoomed(false);
+    }
+  }, [open]);
+
+  // Fetch real visualizations history from Supabase for this wallpaper
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ["wallpaper-visualizations", wallpaper?.id],
+    queryFn: async () => {
+      if (!wallpaper?.id) return [];
+      const { data, error } = await supabase
+        .from("visualizations")
+        .select("id, result_image_url, room_type")
+        .eq("wallpaper_id", wallpaper.id)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data.map((v) => ({
+        id: v.id,
+        room: v.room_type || "Room",
+        image: v.result_image_url,
+        wallpaperTitle: wallpaper.title,
+      }));
+    },
+    enabled: open && !!wallpaper?.id,
+  });
+
   if (!wallpaper) return null;
-  const history = getHistory(wallpaper);
 
   const visualize = () => {
     onOpenChange(false);
-    navigate({ to: "/visualizer", search: { wallpaper: wallpaper.id } });
+    navigate({ to: "/tools/wallpaper-visualizer", search: { wallpaper: wallpaper.id } });
+  };
+
+  const editWallpaper = () => {
+    onOpenChange(false);
+    navigate({ to: "/wallpapers/new", search: { id: wallpaper.id } });
+  };
+
+  const deleteWallpaper = () => {
+    if (onDelete) {
+      onDelete(wallpaper.id, wallpaper.image);
+      onOpenChange(false);
+    }
   };
 
   const scrollGallery = (dir: -1 | 1) => {
@@ -92,10 +122,16 @@ export function WallpaperModal({ wallpaper, open, onOpenChange }: Props) {
               </button>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <button className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer">
+                <button 
+                  onClick={editWallpaper}
+                  className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
+                >
                   <Pencil className="size-3.5" /> Edit
                 </button>
-                <button className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] text-destructive hover:bg-destructive/5 transition-colors cursor-pointer">
+                <button 
+                  onClick={deleteWallpaper}
+                  className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] text-destructive hover:bg-destructive/5 transition-colors cursor-pointer"
+                >
                   <Trash2 className="size-3.5" /> Delete
                 </button>
               </div>
@@ -130,7 +166,9 @@ export function WallpaperModal({ wallpaper, open, onOpenChange }: Props) {
                 Rooms previously generated using this wallpaper.
               </p>
 
-              {history.length === 0 ? (
+              {isLoading ? (
+                <p className="text-sm text-brand-900/40">Loading history...</p>
+              ) : history.length === 0 ? (
                 <div className="border border-dashed border-brand-900/15 rounded-md py-10 px-6 text-center">
                   <ImageOff className="size-5 mx-auto text-brand-900/30 mb-3" />
                   <p className="text-sm text-brand-900/60 mb-5">No visualizations created yet</p>
@@ -206,3 +244,4 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+

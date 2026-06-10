@@ -1,9 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
-import { wallpapers, categories, type Wallpaper } from "@/lib/wallpapers/data";
+import { categories, type Wallpaper } from "@/lib/wallpapers/data";
 import { WallpaperModal } from "@/components/site/wallpaper-modal";
 import { Plus, Eye, Pencil, Trash2, ImagePlus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useProfile } from "@/hooks/use-profile";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/wallpapers")({
   head: () => ({
@@ -16,16 +20,81 @@ export const Route = createFileRoute("/_authenticated/wallpapers")({
 });
 
 function WallpaperList() {
+  const queryClient = useQueryClient();
   const [cat, setCat] = useState("All");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Wallpaper | null>(null);
-  const filtered = wallpapers.filter(
+
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const companyId = profile?.company_id;
+
+  // Query real wallpapers from database
+  const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
+    queryKey: ["wallpapers", companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from("wallpapers")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId,
+  });
+
+  const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({
+    id: w.id,
+    code: w.product_code,
+    title: w.title,
+    category: w.category,
+    image: w.image_url,
+    tint: "",
+  }));
+
+  const handleDelete = async (id: string, imageUrl: string) => {
+    if (!confirm("Are you sure you want to delete this wallpaper? This will also remove any related visualizations.")) {
+      return;
+    }
+
+    try {
+      // 1. Delete database record (cascades or set null on visualizations depending on schema, we set null or cascade)
+      const { error: dbError } = await supabase
+        .from("wallpapers")
+        .delete()
+        .eq("id", id);
+      
+      if (dbError) throw dbError;
+
+      // 2. Delete storage file if it exists in Supabase Storage
+      if (imageUrl.includes("/wallpaper-images/")) {
+        const path = imageUrl.split("/wallpaper-images/")[1];
+        if (path) {
+          await supabase.storage.from("wallpaper-images").remove([path]);
+        }
+      }
+
+      toast.success("Wallpaper deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
+      queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
+    } catch (err: any) {
+      toast.error("Failed to delete wallpaper: " + err.message);
+    }
+  };
+
+  const filtered = wallpapersList.filter(
     (w) =>
       (cat === "All" || w.category === cat) &&
       (query === "" ||
         w.title.toLowerCase().includes(query.toLowerCase()) ||
         w.code.toLowerCase().includes(query.toLowerCase())),
   );
+
+  const isLoading = profileLoading || wallpapersLoading;
+
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
@@ -69,7 +138,11 @@ function WallpaperList() {
           ))}
         </div>
 
-        {wallpapers.length === 0 ? (
+        {isLoading ? (
+          <p className="text-center text-brand-900/50 py-20 font-serif text-2xl italic">
+            Loading wallpapers...
+          </p>
+        ) : wallpapersList.length === 0 ? (
           <EmptyCatalog />
         ) : filtered.length === 0 ? (
           <p className="text-center text-brand-900/50 py-20 font-serif text-2xl italic">
@@ -105,14 +178,12 @@ function WallpaperList() {
                   <CardAction label="Open" onClick={() => setActive(w)}>
                     <Eye className="size-3.5" />
                   </CardAction>
-                  <CardAction label="Edit" to="/wallpapers/new">
+                  <CardAction label="Edit" to="/wallpapers/new" search={{ id: w.id }}>
                     <Pencil className="size-3.5" />
                   </CardAction>
                   <CardAction
                     label="Delete"
-                    onClick={() => {
-                      /* delete hook */
-                    }}
+                    onClick={() => handleDelete(w.id, w.image)}
                     danger
                   >
                     <Trash2 className="size-3.5" />
@@ -127,6 +198,7 @@ function WallpaperList() {
         wallpaper={active}
         open={!!active}
         onOpenChange={(o) => !o && setActive(null)}
+        onDelete={handleDelete}
       />
     </AppShell>
   );
@@ -137,12 +209,14 @@ function CardAction({
   label,
   onClick,
   to,
+  search,
   danger,
 }: {
   children: React.ReactNode;
   label: string;
   onClick?: () => void;
   to?: string;
+  search?: Record<string, any>;
   danger?: boolean;
 }) {
   const cls =
@@ -152,7 +226,7 @@ function CardAction({
       : "hover:bg-accent hover:text-accent-foreground");
   if (to) {
     return (
-      <Link to={to} title={label} aria-label={label} className={cls}>
+      <Link to={to} search={search} title={label} aria-label={label} className={cls}>
         {children}
       </Link>
     );
@@ -183,3 +257,4 @@ function EmptyCatalog() {
     </div>
   );
 }
+

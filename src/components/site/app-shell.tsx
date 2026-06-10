@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   X,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -31,8 +32,8 @@ const NAV: NavItem[] = [
 ];
 
 const TOOLS: NavItem[] = [
-  { to: "/visualizer", label: "Wallpaper Visualizer", icon: Sparkles },
-  { to: "/tools/image-crop", label: "Image Crop", icon: Crop, indent: true },
+  { to: "/tools/wallpaper-visualizer", label: "Wallpaper Visualizer", icon: Sparkles },
+  { to: "/tools/image-crop", label: "Image Crop", icon: Crop },
 ];
 
 const MOBILE_TABS: NavItem[] = [
@@ -85,11 +86,11 @@ function MobileTopBar({ onMenu }: { onMenu: () => void }) {
         Murra.
       </Link>
       <button
-        type="button"
-        onClick={onMenu}
-        aria-label="Open menu"
-        className="size-9 grid place-items-center -mr-2 text-brand-900/70 hover:text-brand-900"
-      >
+          type="button"
+          onClick={onMenu}
+          aria-label="Open menu"
+          className="size-9 grid place-items-center -mr-2 text-brand-900/70 hover:text-brand-900"
+        >
         <Menu className="size-5" />
       </button>
     </header>
@@ -139,7 +140,7 @@ function MobileDrawer({
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
           <NavGroup label="Workspace" items={NAV} pathname={pathname} />
-          <NavGroup label="Tools" items={TOOLS} pathname={pathname} />
+          <NavGroup label="Tools" items={TOOLS} pathname={pathname} collapsible />
         </nav>
         <div className="border-t border-brand-900/5 p-3">
           <Link
@@ -211,7 +212,7 @@ function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-6">
         <NavGroup label="Workspace" items={NAV} pathname={pathname} />
-        <NavGroup label="Tools" items={TOOLS} pathname={pathname} />
+        <NavGroup label="Tools" items={TOOLS} pathname={pathname} collapsible />
       </nav>
 
       {/* User */}
@@ -251,45 +252,80 @@ function NavGroup({
   label,
   items,
   pathname,
+  collapsible = false,
 }: {
   label: string;
   items: NavItem[];
   pathname: string;
+  collapsible?: boolean;
 }) {
+  const isChildActive = items.some(
+    (item) => pathname === item.to || pathname.startsWith(item.to + "/"),
+  );
+  const [isOpen, setIsOpen] = useState(isChildActive || !collapsible);
+
+  useEffect(() => {
+    if (isChildActive) {
+      setIsOpen(true);
+    }
+  }, [isChildActive]);
+
   return (
     <div>
-      <p className="px-4 mb-2 text-[9px] uppercase tracking-[0.24em] text-brand-900/35 font-medium flex items-center gap-2">
-        {label === "Tools" && <Wrench className="size-3" />}
-        {label}
-      </p>
-      <ul className="space-y-0.5">
-        {items.map((item) => {
-          const active = item.exact
-            ? pathname === item.to
-            : pathname === item.to || pathname.startsWith(item.to + "/");
-          const Icon = item.icon;
-          return (
-            <li key={item.to} className="relative">
-              {active && (
-                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" />
-              )}
-              <Link
-                to={item.to}
-                className={
-                  "flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-md text-sm transition-colors " +
-                  (item.indent ? "ml-4 " : "") +
-                  (active
-                    ? "bg-brand-900/5 text-brand-900 font-medium"
-                    : "text-brand-900/65 hover:bg-brand-900/5 hover:text-brand-900")
-                }
-              >
-                <Icon className={"size-4 " + (active ? "text-accent" : "text-brand-900/50")} />
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full px-4 mb-2 text-[9px] uppercase tracking-[0.24em] text-brand-900/35 font-medium flex items-center justify-between hover:text-brand-900 transition-colors cursor-pointer"
+        >
+          <span className="flex items-center gap-2">
+            {label === "Tools" && <Wrench className="size-3" />}
+            {label}
+          </span>
+          <ChevronDown
+            className={
+              "size-3 transition-transform duration-200 " +
+              (isOpen ? "rotate-180" : "rotate-0")
+            }
+          />
+        </button>
+      ) : (
+        <p className="px-4 mb-2 text-[9px] uppercase tracking-[0.24em] text-brand-900/35 font-medium flex items-center gap-2">
+          {label === "Tools" && <Wrench className="size-3" />}
+          {label}
+        </p>
+      )}
+
+      {isOpen && (
+        <ul className="space-y-0.5">
+          {items.map((item) => {
+            const active = item.exact
+              ? pathname === item.to
+              : pathname === item.to || pathname.startsWith(item.to + "/");
+            const Icon = item.icon;
+            return (
+              <li key={item.to} className="relative">
+                {active && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" />
+                )}
+                <Link
+                  to={item.to}
+                  className={
+                    "flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-md text-sm transition-colors " +
+                    (active
+                      ? "bg-brand-900/5 text-brand-900 font-medium"
+                      : "text-brand-900/65 hover:bg-brand-900/5 hover:text-brand-900")
+                  }
+                >
+                  <Icon className={"size-4 " + (active ? "text-accent" : "text-brand-900/50")} />
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
+

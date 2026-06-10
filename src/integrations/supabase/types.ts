@@ -1,14 +1,190 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
-      [_ in never]: never;
+      companies: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      profiles: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          full_name: string | null;
+          role: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          company_id?: string | null;
+          full_name?: string | null;
+          role?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string | null;
+          full_name?: string | null;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      wallpapers: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          product_code: string;
+          title: string;
+          category: string;
+          image_url: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          product_code: string;
+          title: string;
+          category: string;
+          image_url: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string | null;
+          product_code?: string;
+          title?: string;
+          category?: string;
+          image_url?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wallpapers_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mockup_rooms: {
+        Row: {
+          id: string;
+          name: string;
+          category: string | null;
+          image_url: string;
+          mask_url: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          category?: string | null;
+          image_url: string;
+          mask_url?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          category?: string | null;
+          image_url?: string;
+          mask_url?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      visualizations: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          wallpaper_id: string | null;
+          mockup_room_id: string | null;
+          source_type: string;
+          result_image_url: string;
+          room_type: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          wallpaper_id?: string | null;
+          mockup_room_id?: string | null;
+          source_type: string;
+          result_image_url: string;
+          room_type?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string | null;
+          wallpaper_id?: string | null;
+          mockup_room_id?: string | null;
+          source_type?: string;
+          result_image_url?: string;
+          room_type?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "visualizations_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "visualizations_wallpaper_id_fkey";
+            columns: ["wallpaper_id"];
+            isOneToOne: false;
+            referencedRelation: "wallpapers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "visualizations_mockup_room_id_fkey";
+            columns: ["mockup_room_id"];
+            isOneToOne: false;
+            referencedRelation: "mockup_rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

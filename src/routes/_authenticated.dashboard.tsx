@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
-import { wallpapers } from "@/lib/wallpapers/data";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useProfile } from "@/hooks/use-profile";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -13,13 +15,78 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function Dashboard() {
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const companyId = profile?.company_id;
+
+  // Fetch wallpapers count
+  const { data: wallpapersCount = 0 } = useQuery({
+    queryKey: ["wallpapers-count", companyId],
+    queryFn: async () => {
+      if (!companyId) return 0;
+      const { count, error } = await supabase
+        .from("wallpapers")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!companyId,
+  });
+
+  // Fetch visualizations count
+  const { data: visualizationsCount = 0 } = useQuery({
+    queryKey: ["visualizations-count", companyId],
+    queryFn: async () => {
+      if (!companyId) return 0;
+      const { count, error } = await supabase
+        .from("visualizations")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!companyId,
+  });
+
+  // Fetch active mockup rooms count
+  const { data: mockupsCount = 0 } = useQuery({
+    queryKey: ["mockups-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("mockup_rooms")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true);
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  // Fetch recently added wallpapers
+  const { data: recentWallpapers = [], isLoading: wallpapersLoading } = useQuery({
+    queryKey: ["recent-wallpapers", companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from("wallpapers")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId,
+  });
+
+  const isLoading = profileLoading || wallpapersLoading;
+
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
           <div>
             <span className="text-[11px] uppercase tracking-[0.2em] text-accent font-medium">
-              Welcome back, Anna
+              {isLoading ? "Loading..." : `Welcome back, ${profile?.full_name || "Anna"}`}
             </span>
             <h1 className="font-serif text-5xl md:text-6xl mt-3">Your studio.</h1>
           </div>
@@ -31,7 +98,7 @@ function Dashboard() {
               Add Wallpaper
             </Link>
             <Link
-              to="/visualizer"
+              to="/tools/wallpaper-visualizer"
               className="bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
             >
               Try Wallpaper
@@ -40,9 +107,9 @@ function Dashboard() {
         </div>
 
         <div className="grid sm:grid-cols-3 gap-px bg-brand-900/5 mb-16">
-          <Stat label="Wallpapers in catalog" value="124" />
-          <Stat label="Visualizations this month" value="312" />
-          <Stat label="Active mockup rooms" value="18" />
+          <Stat label="Wallpapers in catalog" value={isLoading ? "..." : String(wallpapersCount)} />
+          <Stat label="Visualizations this month" value={isLoading ? "..." : String(visualizationsCount)} />
+          <Stat label="Active mockup rooms" value={isLoading ? "..." : String(mockupsCount)} />
         </div>
 
         <div className="flex items-baseline justify-between mb-6">
@@ -54,21 +121,34 @@ function Dashboard() {
             View all →
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-          {wallpapers.map((w) => (
-            <Link key={w.id} to="/wallpapers/$id" params={{ id: w.id }} className="group">
-              <img
-                src={w.image}
-                alt={w.title}
-                className="aspect-square w-full object-cover outline-1 -outline-offset-1 outline-black/5 group-hover:outline-accent transition-all"
-              />
-              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
-                {w.code}
-              </p>
-              <p className="text-sm font-medium">{w.title}</p>
+        
+        {recentWallpapers.length === 0 ? (
+          <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
+            <p className="text-brand-900/50 font-serif text-xl italic mb-4">No wallpapers in your catalog yet</p>
+            <Link
+              to="/wallpapers/new"
+              className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
+            >
+              Add Your First Wallpaper
             </Link>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            {recentWallpapers.map((w) => (
+              <Link key={w.id} to="/wallpapers" className="group">
+                <img
+                  src={w.image_url}
+                  alt={w.title}
+                  className="aspect-square w-full object-cover outline-1 -outline-offset-1 outline-black/5 group-hover:outline-accent transition-all"
+                />
+                <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+                  {w.product_code}
+                </p>
+                <p className="text-sm font-medium">{w.title}</p>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </AppShell>
   );
@@ -82,3 +162,4 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
