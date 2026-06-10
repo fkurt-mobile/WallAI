@@ -39,7 +39,7 @@ export function AuthShell({
             "Murra changed the way our showroom sells. Every pattern, every wall — instantly."
           </p>
           <p className="mt-6 text-[11px] uppercase tracking-[0.2em] opacity-70">
-            Anna Lindqvist — Heim Studio
+            Interior Designer
           </p>
         </div>
       </div>

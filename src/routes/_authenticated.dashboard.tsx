@@ -86,7 +86,7 @@ function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
           <div>
             <span className="text-[11px] uppercase tracking-[0.2em] text-accent font-medium">
-              {isLoading ? "Loading..." : `Welcome back, ${profile?.full_name || "Anna"}`}
+              {isLoading ? "Loading..." : `Welcome back, ${profile?.full_name || profile?.email || "User"}`}
             </span>
             <h1 className="font-serif text-5xl md:text-6xl mt-3">Your studio.</h1>
           </div>

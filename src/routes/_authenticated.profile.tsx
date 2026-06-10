@@ -20,10 +20,10 @@ function Profile() {
     );
   }
 
-  const fullName = profile?.full_name || "Anna Lindqvist";
-  const email = profile?.email || "anna@heimstudio.se";
-  const companyName = (profile?.companies as any)?.name || "Heim Studio";
-  const initial = fullName ? fullName[0].toUpperCase() : "A";
+  const fullName = profile?.full_name || "";
+  const email = profile?.email || "";
+  const companyName = (profile?.companies as any)?.name || "Company Account";
+  const initial = fullName ? fullName[0].toUpperCase() : (email ? email[0].toUpperCase() : "U");
   const roleDisplay = 
     profile?.role === "platform_admin" ? "Platform Admin" :
     profile?.role === "company_admin" ? "Company Admin" :
@@ -45,7 +45,7 @@ function Profile() {
             {initial}
           </div>
           <div>
-            <p className="font-serif text-2xl">{fullName}</p>
+            <p className="font-serif text-2xl">{fullName || email || "User"}</p>
             <p className="text-sm text-brand-900/50">{email} · {companyName}</p>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
-import { Upload, X, ImagePlus } from "lucide-react";
+import { Upload, ImagePlus, ChevronDown } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
@@ -79,12 +79,20 @@ function AddWallpaper() {
       toast.error("You must belong to a company to save wallpapers.");
       return;
     }
-    if (!productCode.trim() || !title.trim() || !category.trim()) {
-      toast.error("Please fill in all text fields.");
+    if (!productCode.trim()) {
+      toast.error("Product Code is required.");
+      return;
+    }
+    if (!title.trim()) {
+      toast.error("Title is required.");
+      return;
+    }
+    if (!category) {
+      toast.error("Category is required.");
       return;
     }
     if (!imgPreview) {
-      toast.error("An image is required.");
+      toast.error("Wallpaper Image is required.");
       return;
     }
 
@@ -161,145 +169,182 @@ function AddWallpaper() {
 
   return (
     <AppShell>
-      <div className="max-w-3xl mx-auto px-6 lg:px-10 py-14">
+      <div className="max-w-5xl mx-auto px-6 lg:px-10 py-14">
         <Link
           to="/wallpapers"
           className="text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent"
         >
           ← Back to collection
         </Link>
-        <h1 className="font-serif text-5xl mt-6 mb-12">
-          {id ? "Edit wallpaper." : "Add a wallpaper."}
+        <h1 className="font-serif text-5xl mt-6 mb-2">
+          {id ? "Edit Wallpaper" : "Add Wallpaper"}
         </h1>
+        <p className="text-sm text-brand-900/55 mb-12">
+          {id
+            ? "Update your wallpaper pattern details and file information."
+            : "Upload a wallpaper pattern and add product details to your catalog."}
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <Field 
-            label="Product Code" 
-            placeholder="EF-04-GRN" 
-            value={productCode}
-            onChange={(e) => setProductCode(e.target.value)}
-            required
-          />
-          <Field 
-            label="Title" 
-            placeholder="Ethereal Flora" 
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-          <Field 
-            label="Category" 
-            placeholder="Botanical" 
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            required
-          />
+        <form onSubmit={handleSubmit}>
+          <div className="grid md:grid-cols-12 gap-12 items-start">
+            {/* Left Column: Image Upload Area */}
+            <div className="md:col-span-6 lg:col-span-5">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-3 flex items-center gap-1.5">
+                Wallpaper Image
+                <span className="text-destructive font-sans font-medium text-xs">*</span>
+              </span>
 
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-3 flex items-center gap-2">
-              Wallpaper Image{" "}
-              <span className="text-destructive normal-case tracking-normal">*required</span>
-            </span>
+              {!imgPreview ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    handleFiles(e.dataTransfer.files);
+                  }}
+                  className={
+                    "border-2 border-dashed aspect-[4/3] flex flex-col items-center justify-center text-center p-6 bg-card transition-colors " +
+                    (dragOver
+                      ? "border-accent bg-accent/5"
+                      : "border-brand-900/15 hover:border-accent")
+                  }
+                >
+                  <Upload className="size-8 text-brand-900/40 mb-4" />
+                  <p className="font-serif text-xl italic text-brand-900/80 mb-1">
+                    Drop wallpaper image here
+                  </p>
+                  <p className="text-[11px] text-brand-900/40 mb-6">
+                    PNG or JPG up to 20MB
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="border border-brand-900/15 bg-transparent px-6 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-brand-900/5 transition-colors cursor-pointer"
+                  >
+                    Browse Files
+                  </button>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={(e) => handleFiles(e.target.files)}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative bg-card border border-brand-900/8 aspect-[4/3] flex items-center justify-center overflow-hidden">
+                    <img
+                      src={imgPreview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border border-brand-900/8 bg-card px-4 py-3">
+                    <span className="text-xs font-mono text-brand-900/60 truncate max-w-[65%]">
+                      {imgFile
+                        ? imgFile.name
+                        : id
+                        ? "current-wallpaper-image.jpg"
+                        : "wallpaper-image.jpg"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      className="text-[10px] uppercase tracking-[0.2em] font-semibold text-accent hover:underline cursor-pointer"
+                    >
+                      Replace Image
+                    </button>
+                  </div>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={(e) => handleFiles(e.target.files)}
+                  />
+                </div>
+              )}
+            </div>
 
-            {!imgPreview ? (
-              <label
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  handleFiles(e.dataTransfer.files);
-                }}
-                className={
-                  "block border-2 border-dashed aspect-[16/10] flex flex-col items-center justify-center text-center bg-card cursor-pointer transition-colors " +
-                  (dragOver
-                    ? "border-accent bg-accent/5"
-                    : "border-brand-900/20 hover:border-accent")
-                }
-              >
-                <Upload className="size-8 text-brand-900/40 mb-4" />
-                <span className="font-serif text-3xl italic text-brand-900/55">
-                  Drag &amp; drop your image
-                </span>
-                <span className="text-[11px] uppercase tracking-[0.2em] text-brand-900/40 mt-3">
-                  or click to browse · JPG · PNG
+            {/* Right Column: Product details form */}
+            <div className="md:col-span-6 lg:col-span-7 space-y-8">
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-2 block">
+                  Product Code <span className="text-destructive font-sans font-medium text-xs">*</span>
                 </span>
                 <input
-                  ref={inputRef}
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
+                  value={productCode}
+                  onChange={(e) => setProductCode(e.target.value)}
+                  placeholder="EF-04-GRN"
+                  required
+                  className="w-full bg-transparent border-b border-brand-900/15 py-3 text-base focus:outline-none focus:border-accent transition-colors"
                 />
               </label>
-            ) : (
-              <div className="relative bg-card border border-brand-900/8">
-                <img src={imgPreview} alt="Preview" className="w-full max-h-[480px] object-contain" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImgPreview(null);
-                    setImgFile(null);
-                  }}
-                  className="absolute top-3 right-3 size-9 grid place-items-center bg-card/90 backdrop-blur border border-brand-900/10 hover:bg-card cursor-pointer"
-                  aria-label="Remove image"
-                  disabled={loading}
-                >
-                  <X className="size-4" />
-                </button>
-                <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur px-3 py-2 border border-brand-900/10 flex items-center gap-2">
-                  <ImagePlus className="size-3.5 text-accent" />
-                  <span className="text-[10px] uppercase tracking-[0.2em]">Preview</span>
-                </div>
-              </div>
-            )}
-          </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={!imgPreview || loading}
-              className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {loading ? "Saving..." : "Save Wallpaper"}
-            </button>
-            <Link
-              to="/wallpapers"
-              className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors flex items-center justify-center"
-            >
-              Cancel
-            </Link>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-2 block">
+                  Title <span className="text-destructive font-sans font-medium text-xs">*</span>
+                </span>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Ethereal Flora"
+                  required
+                  className="w-full bg-transparent border-b border-brand-900/15 py-3 text-base focus:outline-none focus:border-accent transition-colors"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-2 block">
+                  Category <span className="text-destructive font-sans font-medium text-xs">*</span>
+                </span>
+                <div className="relative">
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    required
+                    className="w-full bg-transparent border-b border-brand-900/15 py-3 text-base focus:outline-none focus:border-accent transition-colors appearance-none cursor-pointer pr-8"
+                  >
+                    <option value="" disabled className="text-brand-900/30">
+                      Select a category...
+                    </option>
+                    <option value="Botanical">Botanical</option>
+                    <option value="Plaster">Plaster</option>
+                    <option value="Linen">Linen</option>
+                    <option value="Geometric">Geometric</option>
+                    <option value="Stripe">Stripe</option>
+                    <option value="Abstract">Abstract</option>
+                  </select>
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-brand-900/40">
+                    <ChevronDown className="size-4" />
+                  </div>
+                </div>
+              </label>
+
+              <div className="flex gap-3 pt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {loading ? "Saving..." : "Save Wallpaper"}
+                </button>
+                <Link
+                  to="/wallpapers"
+                  className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors flex items-center justify-center cursor-pointer"
+                >
+                  Cancel
+                </Link>
+              </div>
+            </div>
           </div>
         </form>
       </div>
     </AppShell>
-  );
-}
-
-interface FieldProps {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  required?: boolean;
-}
-
-function Field({ label, placeholder, value, onChange, required }: FieldProps) {
-  return (
-    <label className="block">
-      <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/60 mb-2 block">
-        {label}
-      </span>
-      <input
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        required={required}
-        className="w-full bg-transparent border-b border-brand-900/15 py-3 text-base focus:outline-none focus:border-accent transition-colors"
-      />
-    </label>
   );
 }

@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useProfile } from "@/hooks/use-profile";
 
 interface NavItem {
   to: string;
@@ -107,6 +108,12 @@ function MobileDrawer({
   pathname: string;
 }) {
   const logout = useLogout();
+  const { data: profile, isLoading } = useProfile();
+
+  const displayName = profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
+  const displayCompany = (profile?.companies as any)?.name || (isLoading ? "Loading..." : "Company Account");
+  const avatarLetter = (profile?.full_name?.trim() ? profile.full_name.trim()[0] : (profile?.email?.trim() ? profile.email.trim()[0] : "U")).toUpperCase();
+
   return (
     <div
       className={
@@ -148,12 +155,12 @@ function MobileDrawer({
             className="flex items-center gap-3 px-3 py-3 rounded-md hover:bg-brand-900/5"
           >
             <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0">
-              A
+              {avatarLetter}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">Anna Lindqvist</p>
+              <p className="text-sm font-medium truncate">{displayName}</p>
               <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/45 truncate">
-                Heim Studio
+                {displayCompany}
               </p>
             </div>
           </Link>
@@ -198,6 +205,12 @@ function MobileTabBar({ pathname }: { pathname: string }) {
 function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const logout = useLogout();
+  const { data: profile, isLoading } = useProfile();
+
+  const displayName = profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
+  const displayCompany = (profile?.companies as any)?.name || (isLoading ? "Loading..." : "Company Account");
+  const avatarLetter = (profile?.full_name?.trim() ? profile.full_name.trim()[0] : (profile?.email?.trim() ? profile.email.trim()[0] : "U")).toUpperCase();
+
 
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 z-40 w-64 flex-col bg-card border-r border-brand-900/8">
@@ -225,12 +238,12 @@ function Sidebar() {
           }
         >
           <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0">
-            A
+            {avatarLetter}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">Anna Lindqvist</p>
+            <p className="text-sm font-medium truncate">{displayName}</p>
             <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/45 truncate">
-              Heim Studio
+              {displayCompany}
             </p>
           </div>
           <User className="size-3.5 text-brand-900/40 shrink-0" />
