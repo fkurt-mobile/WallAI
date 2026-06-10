@@ -1,0 +1,115 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Murra — wallpaper visualization SaaS.
+ * Gallery editorial luxe: warm off-white, charcoal, gilded brass accent.
+ * Typography: Instrument Serif (display) + Inter (body).
+ * Fonts are loaded via <link> in src/routes/__root.tsx.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-gilded: var(--gilded);
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.25rem;
+
+  --brand-50: oklch(0.985 0.006 80);
+  --brand-100: oklch(0.955 0.012 75);
+  --brand-200: oklch(0.905 0.014 70);
+  --brand-800: oklch(0.225 0.005 60);
+  --brand-900: oklch(0.165 0.005 60);
+  --gilded: oklch(0.745 0.085 75);
+
+  --background: var(--brand-50);
+  --foreground: var(--brand-900);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--brand-900);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--brand-900);
+  --primary: var(--brand-900);
+  --primary-foreground: var(--brand-50);
+  --secondary: var(--brand-100);
+  --secondary-foreground: var(--brand-900);
+  --muted: var(--brand-100);
+  --muted-foreground: oklch(0.45 0.01 60);
+  --accent: var(--gilded);
+  --accent-foreground: var(--brand-50);
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: var(--brand-50);
+  --border: oklch(0.165 0.005 60 / 8%);
+  --input: oklch(0.165 0.005 60 / 12%);
+  --ring: var(--gilded);
+
+  --sidebar: var(--brand-50);
+  --sidebar-foreground: var(--brand-900);
+  --sidebar-primary: var(--brand-900);
+  --sidebar-primary-foreground: var(--brand-50);
+  --sidebar-accent: var(--brand-100);
+  --sidebar-accent-foreground: var(--brand-900);
+  --sidebar-border: oklch(0.165 0.005 60 / 8%);
+  --sidebar-ring: var(--gilded);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .font-serif {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+}
