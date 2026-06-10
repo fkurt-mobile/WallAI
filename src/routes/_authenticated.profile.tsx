@@ -80,7 +80,7 @@ function SettingsPage() {
       return CompanyService.updateCompany(profile.company_id, companyName, companySlug);
     },
     onSuccess: () => {
-      toast.success("Company settings updated successfully");
+      toast.success("Company updated successfully");
       queryClient.invalidateQueries({ queryKey: ["user-profile"] });
     },
     onError: (err: any) => {
@@ -724,10 +724,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={
-        "w-full flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-[0.16em] transition-all duration-300 font-medium whitespace-nowrap cursor-pointer " +
+        "settings-tab w-full text-xs uppercase tracking-[0.16em] transition-all duration-300 font-medium whitespace-nowrap cursor-pointer " +
         (active
-          ? "lg:bg-brand-900/5 text-brand-900 lg:font-semibold border-b-2 lg:border-b-0 lg:border-r-2 border-accent"
-          : "text-brand-900/50 hover:text-brand-900 hover:bg-brand-50 border-b-2 lg:border-b-0 border-transparent")
+          ? "active font-semibold"
+          : "text-brand-900/50 hover:text-brand-900 hover:bg-brand-50")
       }
     >
       <Icon className={"size-4 shrink-0 " + (active ? "text-accent" : "text-brand-900/40")} />

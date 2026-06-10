@@ -131,4 +131,29 @@
   border-color: rgba(255, 255, 255, 0.45) !important;
 }
 
+/* Settings Tab Layout & Active Indicator */
+.settings-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px 18px 28px;
+}
+
+.settings-tab.active {
+  background: #f3f0eb;
+  color: #111;
+}
+
+.settings-tab.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #d4a85f;
+}
+
+
 

@@ -99,7 +99,18 @@ function Visualizer() {
     image: m.image_url,
   }));
 
-  const mockupCategories = ["All", ...Array.from(new Set(mockupsList.map((m) => m.category)))];
+  const mockupCategories = [
+    "All",
+    "Bedroom",
+    "Living Room",
+    "Office",
+    "Dining Room",
+    "Cafe",
+    "Restaurant",
+    "Hotel",
+    "Hallway",
+    "Kids Room"
+  ];
 
   // Load wallpaper from query param if provided
   useEffect(() => {
@@ -594,7 +605,6 @@ function AiLoading({ onDone }: { onDone: () => void }) {
   );
 }
 
-/* ────────── Step 2b: Mockup Gallery ────────── */
 interface MockupGalleryProps {
   mockups: Mockup[];
   categories: string[];
@@ -604,53 +614,105 @@ interface MockupGalleryProps {
 
 function MockupGallery({ mockups, categories, onPick, onBack }: MockupGalleryProps) {
   const [cat, setCat] = useState("All");
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
+  
   const list = mockups.filter((m) => cat === "All" || m.category === cat);
+  
   return (
     <section>
       <Eyebrow>Step Two</Eyebrow>
       <Heading>Pick a room.</Heading>
-      <div className="flex gap-1 mt-10 mb-10 overflow-x-auto border-b border-brand-900/5">
+      
+      {/* Category filters */}
+      <div className="flex gap-1 mt-10 mb-10 overflow-x-auto border-b border-brand-900/5 scrollbar-none">
         {categories.map((c) => (
           <button
             key={c}
             onClick={() => setCat(c)}
             className={
-              "px-4 py-3 text-[11px] uppercase tracking-[0.2em] border-b-2 -mb-px cursor-pointer " +
+              "px-4 py-3 text-[11px] uppercase tracking-[0.2em] border-b-2 -mb-px whitespace-nowrap transition-all duration-300 cursor-pointer " +
               (cat === c
-                ? "border-brand-900 text-brand-900"
-                : "border-transparent text-brand-900/50 hover:text-brand-900")
+                ? "border-brand-900 text-brand-900 font-semibold"
+                : "border-transparent text-brand-900/40 hover:text-brand-900")
             }
           >
             {c}
           </button>
         ))}
       </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      
+      {/* Mockup Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {list.map((m) => (
-          <button key={m.id} onClick={() => onPick(m)} className="group text-left cursor-pointer">
-            <div className="aspect-[4/3] overflow-hidden">
+          <div key={m.id} className="group flex flex-col text-left">
+            {/* Image container with 16:9 aspect ratio and hover state */}
+            <div className="relative aspect-[16/9] overflow-hidden bg-brand-100 border border-brand-900/5 shadow-sm">
               <img
                 src={m.image}
                 alt={m.name}
                 loading="lazy"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
               />
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
-                  {m.category}
-                </p>
-                <p className="text-base font-medium mt-1">{m.name}</p>
+              {/* Glassmorphic hover overlay */}
+              <div className="absolute inset-0 bg-brand-950/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 z-10">
+                <button
+                  type="button"
+                  onClick={() => setPreviewImg(m.image)}
+                  className="border border-brand-50/20 text-brand-50 hover:bg-brand-50 hover:text-brand-950 px-4 py-2 text-[10px] uppercase tracking-[0.2em] font-semibold transition-all duration-300 cursor-pointer"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPick(m)}
+                  className="bg-brand-50 text-brand-950 hover:bg-accent hover:text-brand-50 px-4 py-2 text-[10px] uppercase tracking-[0.2em] font-semibold transition-all duration-300 cursor-pointer"
+                >
+                  Select
+                </button>
               </div>
-              <span className="text-[11px] uppercase tracking-[0.2em] text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                Select →
-              </span>
             </div>
-          </button>
+            {/* Meta details */}
+            <div className="mt-4 flex flex-col">
+              <span className="text-[9px] uppercase tracking-[0.22em] text-accent/80 font-medium">
+                {m.category}
+              </span>
+              <h4 className="font-serif text-lg text-brand-900/95 mt-1 font-medium italic">
+                {m.name}
+              </h4>
+            </div>
+          </div>
         ))}
       </div>
-      <BackBtn onClick={onBack} className="mt-12" />
+      
+      <div className="mt-14">
+        <BackBtn onClick={onBack} />
+      </div>
+
+      {/* Image Preview Modal */}
+      {previewImg && (
+        <div
+          className="fixed inset-0 z-50 bg-brand-950/70 backdrop-blur-md flex items-center justify-center p-4 md:p-10 transition-all animate-in fade-in duration-300"
+          onClick={() => setPreviewImg(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-6 right-6 text-brand-50 hover:text-accent text-[11px] uppercase tracking-[0.22em] z-50 cursor-pointer"
+            onClick={() => setPreviewImg(null)}
+          >
+            ✕ Close Preview
+          </button>
+          <div
+            className="relative max-w-5xl max-h-[80vh] w-full overflow-hidden bg-card border border-white/10 shadow-2xl flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImg}
+              alt="Room preview"
+              className="w-full h-auto max-h-[80vh] object-contain"
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
