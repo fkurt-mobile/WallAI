@@ -138,7 +138,8 @@ export async function detectWallBounds(
 export async function compositeWallpaper(
   mockupSrc: string,
   wallpaperSrc: string,
-  quadPoints: [number, number][] | null
+  quadPoints: [number, number][] | null,
+  threshold = 80
 ): Promise<string> {
   const [mockupImg, wallpaperImg] = await Promise.all([
     loadImage(mockupSrc),
@@ -259,8 +260,8 @@ export async function compositeWallpaper(
   const data = imgData.data;
 
   // Threshold: Manhattan distance per channel at which a pixel is "furniture"
-  // 45 works well for most neutral walls; furniture colours are far enough away.
-  const COLOUR_THRESHOLD = 45;
+  // 80 works well for textured/shadowed walls; furniture colours are far enough away.
+  const COLOUR_THRESHOLD = threshold;
   const MAX_DIST = COLOUR_THRESHOLD * 3; // max Manhattan distance (3 channels)
 
   for (let y = minY; y <= Math.min(maxY, H - 1); y++) {
