@@ -143,7 +143,7 @@ Do not change any other part of the room.`;
 // Model: "grok-imagine-image-quality" by default, or override with XAI_IMAGE_MODEL.
 //
 // Returns a single generated image URL.
-// Called 4x in parallel by the API route to produce 4 variations.
+// The API route decides how many parallel calls to make.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateRoomDesign({
   wallpaperImageUrl,

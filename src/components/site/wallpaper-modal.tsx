@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ZoomIn, Pencil, Trash2, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { type Wallpaper } from "@/lib/wallpapers/data";
-import { VisualizationPreviewModal, type VizPreview } from "./visualization-preview-modal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,7 +16,6 @@ interface Props {
 export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Props) {
   const navigate = useNavigate();
   const [zoomed, setZoomed] = useState(false);
-  const [preview, setPreview] = useState<VizPreview | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -32,15 +30,22 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
       if (!wallpaper?.id) return [];
       const { data, error } = await supabase
         .from("visualizations")
-        .select("id, result_image_url, room_type")
+        .select("id, result_image_url, preview_image_url, room_type, style, mood, created_at")
         .eq("wallpaper_id", wallpaper.id)
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
       return data.map((v) => ({
         id: v.id,
         room: v.room_type || "Room",
-        image: v.result_image_url,
+        style: v.style || "Style",
+        mood: v.mood || "Mood",
+        createdAt: new Date(v.created_at).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        image: v.preview_image_url || v.result_image_url,
         wallpaperTitle: wallpaper.title,
       }));
     },
@@ -122,13 +127,13 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
               </button>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <button 
+                <button
                   onClick={editWallpaper}
                   className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <Pencil className="size-3.5" /> Edit
                 </button>
-                <button 
+                <button
                   onClick={deleteWallpaper}
                   className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] text-destructive hover:bg-destructive/5 transition-colors cursor-pointer"
                 >
@@ -187,14 +192,7 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
                   {history.map((h) => (
                     <button
                       key={h.id}
-                      onClick={() =>
-                        setPreview({
-                          id: h.id,
-                          image: h.image,
-                          room: h.room,
-                          wallpaperTitle: wallpaper.title,
-                        })
-                      }
+                      onClick={() => navigate({ to: "/visualizations/$id", params: { id: h.id } })}
                       className="group/thumb shrink-0 text-left cursor-pointer"
                     >
                       <div className="size-[120px] overflow-hidden rounded-md bg-brand-100">
@@ -208,6 +206,10 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
                       <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-brand-900/55">
                         {h.room}
                       </p>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-brand-900/35">
+                        {h.style} · {h.mood}
+                      </p>
+                      <p className="text-[10px] text-brand-900/35">{h.createdAt}</p>
                     </button>
                   ))}
                 </div>
@@ -227,11 +229,6 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
           </div>
         </div>
       </DialogContent>
-      <VisualizationPreviewModal
-        viz={preview}
-        open={!!preview}
-        onOpenChange={(o) => !o && setPreview(null)}
-      />
     </Dialog>
   );
 }
@@ -244,4 +241,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

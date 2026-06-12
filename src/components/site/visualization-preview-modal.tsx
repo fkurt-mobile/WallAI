@@ -42,7 +42,7 @@ export function VisualizationPreviewModal({
             </div>
           </div>
           <div className="overflow-y-auto bg-brand-50 p-6 lg:p-8 border-l border-brand-900/8">
-            <SharePanel title="Share Visualization" />
+            <SharePanel title="Share Visualization" previewImageUrl={viz.image} />
           </div>
         </div>
       </DialogContent>

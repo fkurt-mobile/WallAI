@@ -112,6 +112,92 @@ export type Database = {
           },
         ];
       };
+      ai_generations: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          user_id: string | null;
+          wallpaper_id: string | null;
+          reference_generation_id: string | null;
+          room_type: string;
+          style: string;
+          mood: string;
+          custom_prompt: string | null;
+          variation_count: number;
+          status: string;
+          variation_1_url: string | null;
+          variation_2_url: string | null;
+          variation_3_url: string | null;
+          variation_4_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          user_id?: string | null;
+          wallpaper_id?: string | null;
+          reference_generation_id?: string | null;
+          room_type: string;
+          style: string;
+          mood: string;
+          custom_prompt?: string | null;
+          variation_count?: number;
+          status?: string;
+          variation_1_url?: string | null;
+          variation_2_url?: string | null;
+          variation_3_url?: string | null;
+          variation_4_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string | null;
+          user_id?: string | null;
+          wallpaper_id?: string | null;
+          reference_generation_id?: string | null;
+          room_type?: string;
+          style?: string;
+          mood?: string;
+          custom_prompt?: string | null;
+          variation_count?: number;
+          status?: string;
+          variation_1_url?: string | null;
+          variation_2_url?: string | null;
+          variation_3_url?: string | null;
+          variation_4_url?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_generations_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_generations_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_generations_wallpaper_id_fkey";
+            columns: ["wallpaper_id"];
+            isOneToOne: false;
+            referencedRelation: "wallpapers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_generations_reference_generation_id_fkey";
+            columns: ["reference_generation_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_generations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       mockup_rooms: {
         Row: {
           id: string;
@@ -149,9 +235,13 @@ export type Database = {
           user_id: string | null;
           wallpaper_id: string | null;
           mockup_room_id: string | null;
+          generation_id: string | null;
           source_type: string;
+          preview_image_url: string | null;
           result_image_url: string;
           room_type: string | null;
+          style: string | null;
+          mood: string | null;
           created_at: string;
         };
         Insert: {
@@ -160,9 +250,13 @@ export type Database = {
           user_id?: string | null;
           wallpaper_id?: string | null;
           mockup_room_id?: string | null;
+          generation_id?: string | null;
           source_type: string;
+          preview_image_url?: string | null;
           result_image_url: string;
           room_type?: string | null;
+          style?: string | null;
+          mood?: string | null;
           created_at?: string;
         };
         Update: {
@@ -171,9 +265,13 @@ export type Database = {
           user_id?: string | null;
           wallpaper_id?: string | null;
           mockup_room_id?: string | null;
+          generation_id?: string | null;
           source_type?: string;
+          preview_image_url?: string | null;
           result_image_url?: string;
           room_type?: string | null;
+          style?: string | null;
+          mood?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -196,6 +294,13 @@ export type Database = {
             columns: ["mockup_room_id"];
             isOneToOne: false;
             referencedRelation: "mockup_rooms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "visualizations_generation_id_fkey";
+            columns: ["generation_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_generations";
             referencedColumns: ["id"];
           },
         ];

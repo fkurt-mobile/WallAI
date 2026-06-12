@@ -1,13 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect, useMemo } from "react";
 import { z } from "zod";
 import { AppShell } from "@/components/site/app-shell";
+import { SharePanel } from "@/components/site/share-panel";
 import { type Wallpaper } from "@/lib/wallpapers/data";
 import {
   Sparkles,
   ChevronLeft,
-  Download,
-  Share2,
   RefreshCw,
   Plus,
   Check,
@@ -52,6 +51,7 @@ type Step =
   | "room-type"
   | "style"
   | "mood"
+  | "variation-count"
   | "instructions"
   | "generating"
   | "result";
@@ -61,15 +61,32 @@ interface DesignState {
   roomType: string;
   style: string;
   mood: string;
+  variationCount: number;
   customPrompt: string;
 }
 
+interface GeneratedVariation {
+  id: string;
+  preview_image_url: string;
+  result_image_url: string;
+  room_type: string;
+  style: string;
+  mood: string;
+  created_at: string;
+}
+
 interface GenerationResult {
-  id: string | null;
-  variation_1_url: string;
-  variation_2_url: string;
-  variation_3_url: string;
-  variation_4_url: string;
+  id: string;
+  wallpaper_id: string;
+  room_type: string;
+  style: string;
+  mood: string;
+  variation_count: number;
+  variation_1_url: string | null;
+  variation_2_url: string | null;
+  variation_3_url: string | null;
+  variation_4_url: string | null;
+  visualizations: GeneratedVariation[];
 }
 
 // ── Option Data ────────────────────────────────────────────────────────────────
@@ -144,6 +161,7 @@ function AiRoomDesigner() {
     roomType: "",
     style: "",
     mood: "",
+    variationCount: 2,
     customPrompt: "",
   });
   const [result, setResult] = useState<GenerationResult | null>(null);
@@ -166,14 +184,18 @@ function AiRoomDesigner() {
     enabled: !!profile?.id,
   });
 
-  const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({
-    id: w.id,
-    code: w.product_code,
-    title: w.title,
-    category: w.category,
-    image: w.image_url,
-    tint: "",
-  }));
+  const wallpapersList: Wallpaper[] = useMemo(
+    () =>
+      dbWallpapers.map((w) => ({
+        id: w.id,
+        code: w.product_code,
+        title: w.title,
+        category: w.category,
+        image: w.image_url,
+        tint: "",
+      })),
+    [dbWallpapers],
+  );
 
   // ── Load wallpaper from query param ────────────────────────────────────────
   useEffect(() => {
@@ -184,7 +206,7 @@ function AiRoomDesigner() {
         setStep("room-type");
       }
     }
-  }, [search.wallpaper, dbWallpapers]);
+  }, [search.wallpaper, wallpapersList]);
 
   // ── Auth helper ────────────────────────────────────────────────────────────
   const getToken = async () => {
@@ -197,7 +219,7 @@ function AiRoomDesigner() {
   };
 
   // ── Generate ───────────────────────────────────────────────────────────────
-  const handleGenerate = async () => {
+  const handleGenerate = async (referenceGenerationId?: string | null) => {
     if (!design.wallpaper || !design.roomType || !design.style || !design.mood) {
       toast.error("Please complete all required steps first.");
       return;
@@ -225,7 +247,9 @@ function AiRoomDesigner() {
           roomType: design.roomType,
           style: design.style,
           mood: design.mood,
+          variationCount: design.variationCount,
           customPrompt: design.customPrompt || undefined,
+          referenceGenerationId: referenceGenerationId || undefined,
         }),
       });
 
@@ -234,7 +258,9 @@ function AiRoomDesigner() {
         try {
           const errData = await response.json();
           if (errData.error) errMsg = errData.error;
-        } catch (_) {}
+        } catch (parseError) {
+          void parseError;
+        }
         throw new Error(errMsg);
       }
 
@@ -244,9 +270,11 @@ function AiRoomDesigner() {
       setStep("result");
 
       queryClient.invalidateQueries({ queryKey: ["ai-generations"] });
+      queryClient.invalidateQueries({ queryKey: ["visualizations", profile?.id] });
+      queryClient.invalidateQueries({ queryKey: ["wallpaper-visualizations"] });
       toast.success("Your AI room designs are ready!");
-    } catch (err: any) {
-      const message = err.message || "Generation failed. Please try again.";
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Generation failed. Please try again.";
       setGenError(message);
       toast.error(message);
     } finally {
@@ -255,7 +283,14 @@ function AiRoomDesigner() {
   };
 
   const resetAll = () => {
-    setDesign({ wallpaper: null, roomType: "", style: "", mood: "", customPrompt: "" });
+    setDesign({
+      wallpaper: null,
+      roomType: "",
+      style: "",
+      mood: "",
+      variationCount: 2,
+      customPrompt: "",
+    });
     setResult(null);
     setActiveVariation(0);
     setGenError(null);
@@ -264,23 +299,28 @@ function AiRoomDesigner() {
 
   // ── Step number for header stepper ────────────────────────────────────────
   const stepNum =
-    step === "wallpaper" ? 1 :
-    step === "room-type" ? 2 :
-    step === "style" ? 3 :
-    step === "mood" ? 4 :
-    step === "instructions" ? 5 : 5;
+    step === "wallpaper"
+      ? 1
+      : step === "room-type"
+        ? 2
+        : step === "style"
+          ? 3
+          : step === "mood"
+            ? 4
+            : step === "variation-count"
+              ? 5
+              : step === "instructions"
+                ? 6
+                : 6;
 
-  // ── Variation URLs array ───────────────────────────────────────────────────
-  const variations = result
-    ? [
-        result.variation_1_url,
-        result.variation_2_url,
-        result.variation_3_url,
-        result.variation_4_url,
-      ].filter(Boolean)
-    : [];
-
-  const activeImageUrl = variations[activeVariation] || "";
+  const variations = result?.visualizations ?? [];
+  const activeVariationRecord = variations[activeVariation] || null;
+  const activeImageUrl =
+    activeVariationRecord?.preview_image_url || activeVariationRecord?.result_image_url || "";
+  const activeShareUrl =
+    typeof window !== "undefined" && activeVariationRecord
+      ? `${window.location.origin}/visualizations/${activeVariationRecord.id}`
+      : "";
 
   return (
     <AppShell contentClassName="pb-32">
@@ -337,12 +377,22 @@ function AiRoomDesigner() {
           <MoodStep
             selected={design.mood}
             onSelect={(v) => setDesign((d) => ({ ...d, mood: v }))}
-            onContinue={() => setStep("instructions")}
+            onContinue={() => setStep("variation-count")}
             onBack={() => setStep("style")}
           />
         )}
 
-        {/* ── Step 5: Instructions ── */}
+        {/* ── Step 5: Variation Count ── */}
+        {step === "variation-count" && (
+          <VariationCountStep
+            selected={design.variationCount}
+            onSelect={(v) => setDesign((d) => ({ ...d, variationCount: v }))}
+            onContinue={() => setStep("instructions")}
+            onBack={() => setStep("mood")}
+          />
+        )}
+
+        {/* ── Step 6: Instructions ── */}
         {step === "instructions" && (
           <InstructionsStep
             value={design.customPrompt}
@@ -351,8 +401,9 @@ function AiRoomDesigner() {
             roomType={design.roomType}
             style={design.style}
             mood={design.mood}
+            variationCount={design.variationCount}
             onGenerate={handleGenerate}
-            onBack={() => setStep("mood")}
+            onBack={() => setStep("variation-count")}
           />
         )}
 
@@ -360,6 +411,7 @@ function AiRoomDesigner() {
         {step === "generating" && (
           <GeneratingScreen
             wallpaper={design.wallpaper!}
+            variationCount={design.variationCount}
             error={genError}
             onRetry={handleGenerate}
             onBack={() => {
@@ -380,9 +432,11 @@ function AiRoomDesigner() {
             activeVariation={activeVariation}
             onSelectVariation={setActiveVariation}
             activeImageUrl={activeImageUrl}
-            onGenerateMore={handleGenerate}
+            shareUrl={activeShareUrl}
+            onGenerateMore={() => handleGenerate(result.id)}
             onCreateNew={resetAll}
             generating={generating}
+            variationCount={design.variationCount}
           />
         )}
       </div>
@@ -419,7 +473,7 @@ function AiRoomDesigner() {
 // ── Stepper ────────────────────────────────────────────────────────────────────
 
 function AiDesignerStepper({ current }: { current: number }) {
-  const steps = ["Wallpaper", "Room Type", "Style", "Mood", "Generate"];
+  const steps = ["Wallpaper", "Room Type", "Style", "Mood", "Variations", "Generate"];
   return (
     <div className="flex items-center gap-0">
       {steps.map((label, i) => {
@@ -435,8 +489,8 @@ function AiDesignerStepper({ current }: { current: number }) {
                   (done
                     ? "bg-accent text-brand-950"
                     : active
-                    ? "bg-brand-900 text-brand-50"
-                    : "bg-brand-900/10 text-brand-900/40")
+                      ? "bg-brand-900 text-brand-50"
+                      : "bg-brand-900/10 text-brand-900/40")
                 }
               >
                 {done ? <Check className="size-3" /> : num}
@@ -451,11 +505,7 @@ function AiDesignerStepper({ current }: { current: number }) {
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div
-                className={
-                  "w-6 h-px mx-2 " + (done ? "bg-accent" : "bg-brand-900/15")
-                }
-              />
+              <div className={"w-6 h-px mx-2 " + (done ? "bg-accent" : "bg-brand-900/15")} />
             )}
           </div>
         );
@@ -521,7 +571,9 @@ function SelectWallpaper({
                   </span>
                 </div>
               </div>
-              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{w.code}</p>
+              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+                {w.code}
+              </p>
               <p className="text-sm font-medium">{w.title}</p>
             </button>
           ))}
@@ -574,7 +626,8 @@ function RoomTypeStep({
               )}
               <Icon
                 className={
-                  "size-6 transition-colors " + (active ? "text-accent" : "text-brand-900/40 group-hover:text-accent/70")
+                  "size-6 transition-colors " +
+                  (active ? "text-accent" : "text-brand-900/40 group-hover:text-accent/70")
                 }
               />
               <span className="text-sm font-medium leading-snug">{label}</span>
@@ -634,10 +687,12 @@ function StyleStep({
                   <Check className="size-2.5 text-brand-950" />
                 </span>
               )}
-              <span className={
-                "font-serif text-lg font-medium italic transition-colors " +
-                (active ? "text-brand-900" : "text-brand-900 group-hover:text-accent")
-              }>
+              <span
+                className={
+                  "font-serif text-lg font-medium italic transition-colors " +
+                  (active ? "text-brand-900" : "text-brand-900 group-hover:text-accent")
+                }
+              >
                 {label}
               </span>
               <span className="text-[11px] text-brand-900/50 leading-relaxed">{desc}</span>
@@ -687,9 +742,7 @@ function MoodStep({
               onClick={() => onSelect(value)}
               className={
                 "group relative p-6 border text-left transition-all duration-200 cursor-pointer " +
-                (active
-                  ? "border-accent shadow-sm"
-                  : "border-brand-900/8 hover:border-accent/50")
+                (active ? "border-accent shadow-sm" : "border-brand-900/8 hover:border-accent/50")
               }
             >
               {active && (
@@ -714,7 +767,67 @@ function MoodStep({
   );
 }
 
-// ── Step 5: Optional Instructions ─────────────────────────────────────────────
+// ── Step 5: Variation Count ───────────────────────────────────────────────────
+
+function VariationCountStep({
+  selected,
+  onSelect,
+  onContinue,
+  onBack,
+}: {
+  selected: number;
+  onSelect: (v: number) => void;
+  onContinue: () => void;
+  onBack: () => void;
+}) {
+  const options = [1, 2, 3, 4];
+  return (
+    <section>
+      <Eyebrow>Step 5 of 6</Eyebrow>
+      <Heading>How many variations would you like?</Heading>
+      <p className="text-brand-900/60 max-w-md mb-12">
+        Fewer variations reduce cost. The default is 2, which keeps output focused and efficient.
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12 max-w-2xl">
+        {options.map((value) => {
+          const active = selected === value;
+          return (
+            <button
+              key={value}
+              onClick={() => onSelect(value)}
+              className={
+                "relative p-8 border transition-all duration-200 cursor-pointer text-left flex flex-col gap-2 " +
+                (active
+                  ? "border-accent bg-accent/5 shadow-sm"
+                  : "border-brand-900/8 bg-card hover:border-accent/50 hover:bg-accent/2")
+              }
+            >
+              {active && (
+                <span className="absolute top-3 right-3 size-4 rounded-full bg-accent grid place-items-center">
+                  <Check className="size-2.5 text-brand-950" />
+                </span>
+              )}
+              <span className="font-serif text-4xl italic">{value}</span>
+              <span className="text-[11px] uppercase tracking-[0.18em] text-brand-900/45">
+                {value === 1 ? "Single option" : "Multiple options"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <StepActions
+        onContinue={onContinue}
+        canContinue={true}
+        onBack={onBack}
+        continueLabel="Continue →"
+      />
+    </section>
+  );
+}
+
+// ── Step 6: Optional Instructions ─────────────────────────────────────────────
 
 function InstructionsStep({
   value,
@@ -723,6 +836,7 @@ function InstructionsStep({
   roomType,
   style,
   mood,
+  variationCount,
   onGenerate,
   onBack,
 }: {
@@ -732,6 +846,7 @@ function InstructionsStep({
   roomType: string;
   style: string;
   mood: string;
+  variationCount: number;
   onGenerate: () => void;
   onBack: () => void;
 }) {
@@ -751,10 +866,13 @@ function InstructionsStep({
           className="size-16 object-cover shrink-0 outline-1 -outline-offset-1 outline-black/5"
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">Design Summary</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
+            Design Summary
+          </p>
           <p className="text-sm font-semibold">{wallpaper.title}</p>
           <p className="text-xs text-brand-900/55">
-            {roomType} · {style} · {mood}
+            {roomType} · {style} · {mood} · {variationCount} variation
+            {variationCount > 1 ? "s" : ""}
           </p>
         </div>
       </div>
@@ -796,7 +914,16 @@ function InstructionsStep({
       </div>
 
       <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/35 mt-4">
-        AI will generate 4 unique variations · Takes 30–90 seconds
+        AI will generate {variationCount} unique variation{variationCount > 1 ? "s" : ""} · Takes
+        approximately{" "}
+        {variationCount === 1
+          ? "20–30"
+          : variationCount === 2
+            ? "30–45"
+            : variationCount === 3
+              ? "45–60"
+              : "60–90"}{" "}
+        seconds
       </p>
     </section>
   );
@@ -806,11 +933,13 @@ function InstructionsStep({
 
 function GeneratingScreen({
   wallpaper,
+  variationCount,
   error,
   onRetry,
   onBack,
 }: {
   wallpaper: Wallpaper;
+  variationCount: number;
   error: string | null;
   onRetry: () => void;
   onBack: () => void;
@@ -821,13 +950,20 @@ function GeneratingScreen({
   useEffect(() => {
     if (error) return;
     const start = Date.now();
-    const duration = 75000; // ~75s estimate for 4×2-step generations
+    const duration =
+      variationCount === 1
+        ? 25000
+        : variationCount === 2
+          ? 40000
+          : variationCount === 3
+            ? 55000
+            : 70000;
     const tick = setInterval(() => {
       const p = Math.min(92, ((Date.now() - start) / duration) * 100);
       setProgress(p);
     }, 200);
     return () => clearInterval(tick);
-  }, [error]);
+  }, [error, variationCount]);
 
   useEffect(() => {
     if (error) return;
@@ -910,7 +1046,9 @@ function GeneratingScreen({
       <div className="flex items-center gap-6 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
         <span>{Math.round(progress)}%</span>
         <span>·</span>
-        <span>Generating 4 variations</span>
+        <span>
+          Generating {variationCount} variation{variationCount > 1 ? "s" : ""}
+        </span>
         <span>·</span>
         <span>~30–90 seconds</span>
       </div>
@@ -948,34 +1086,26 @@ function ResultGallery({
   activeVariation,
   onSelectVariation,
   activeImageUrl,
+  shareUrl,
   onGenerateMore,
   onCreateNew,
   generating,
+  variationCount,
 }: {
   wallpaper: Wallpaper;
   roomType: string;
   style: string;
   mood: string;
-  variations: string[];
+  variations: GeneratedVariation[];
   activeVariation: number;
   onSelectVariation: (i: number) => void;
   activeImageUrl: string;
+  shareUrl: string;
   onGenerateMore: () => void;
   onCreateNew: () => void;
   generating: boolean;
+  variationCount: number;
 }) {
-  const [shareToast, setShareToast] = useState(false);
-
-  const handleShare = async () => {
-    try {
-      await navigator.clipboard.writeText(activeImageUrl);
-      setShareToast(true);
-      setTimeout(() => setShareToast(false), 2000);
-    } catch {
-      window.open(activeImageUrl, "_blank");
-    }
-  };
-
   return (
     <section>
       {/* Header */}
@@ -984,7 +1114,8 @@ function ResultGallery({
           <Eyebrow>AI Room Designer · Result</Eyebrow>
           <h1 className="font-serif text-5xl md:text-6xl mt-2">Your designs.</h1>
           <p className="text-brand-900/55 mt-3">
-            {roomType} · {style} · {mood}
+            {roomType} · {style} · {mood} · {variationCount} variation
+            {variationCount > 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex gap-3 shrink-0">
@@ -1002,9 +1133,13 @@ function ResultGallery({
             className="bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-50"
           >
             {generating ? (
-              <><Loader2 className="size-3.5 animate-spin" /> Generating…</>
+              <>
+                <Loader2 className="size-3.5 animate-spin" /> Generating…
+              </>
             ) : (
-              <><Sparkles className="size-3.5" /> Generate More Like This</>
+              <>
+                <Sparkles className="size-3.5" /> Generate More Like This
+              </>
             )}
           </button>
         </div>
@@ -1017,7 +1152,7 @@ function ResultGallery({
             <img
               key={activeImageUrl}
               src={activeImageUrl}
-              alt={`Variation ${VARIATION_LABELS[activeVariation]}`}
+              alt={`Variation ${VARIATION_LABELS[activeVariation] || activeVariation + 1}`}
               className="w-full max-h-[75vh] object-cover shadow-2xl animate-in fade-in duration-500"
             />
             {/* Wallpaper badge */}
@@ -1027,7 +1162,7 @@ function ResultGallery({
                 <p className="text-[9px] uppercase tracking-[0.2em] text-brand-900/40">Wallpaper</p>
                 <p className="text-sm font-semibold truncate">{wallpaper.title}</p>
                 <p className="text-[9px] text-brand-900/40 mt-0.5">
-                  Variation {VARIATION_LABELS[activeVariation]}
+                  Variation {VARIATION_LABELS[activeVariation] || activeVariation + 1}
                 </p>
               </div>
             </div>
@@ -1059,12 +1194,12 @@ function ResultGallery({
                   }
                 >
                   <img
-                    src={url}
-                    alt={`Variation ${VARIATION_LABELS[i]}`}
+                    src={url.preview_image_url || url.result_image_url}
+                    alt={`Variation ${VARIATION_LABELS[i] || i + 1}`}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute bottom-1.5 left-1.5 bg-card/90 backdrop-blur-sm px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] font-bold">
-                    {VARIATION_LABELS[i]}
+                    {VARIATION_LABELS[i] || i + 1}
                   </div>
                   {activeVariation === i && (
                     <div className="absolute top-1.5 right-1.5 size-4 rounded-full bg-accent grid place-items-center">
@@ -1081,46 +1216,23 @@ function ResultGallery({
         <div className="lg:sticky lg:top-28 space-y-4">
           {/* Design info */}
           <div className="bg-card border border-brand-900/8 p-5 space-y-3">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Design Details</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+              Design Details
+            </p>
             <div className="space-y-1.5">
               <DetailRow label="Room" value={roomType} />
               <DetailRow label="Style" value={style} />
               <DetailRow label="Mood" value={mood} />
               <DetailRow label="Wallpaper" value={wallpaper.title} />
+              <DetailRow label="Variations" value={String(variationCount)} />
             </div>
           </div>
 
-          {/* Download buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              id="download-png-btn"
-              onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${VARIATION_LABELS[activeVariation]}.png`)
-              }
-              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
-            >
-              <Download className="size-3.5" /> PNG
-            </button>
-            <button
-              id="download-jpg-btn"
-              onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${VARIATION_LABELS[activeVariation]}.jpg`)
-              }
-              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
-            >
-              <Download className="size-3.5" /> JPG
-            </button>
-          </div>
-
-          {/* Share */}
-          <button
-            id="share-link-btn"
-            onClick={handleShare}
-            className="relative w-full inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
-          >
-            <Share2 className="size-3.5" />
-            {shareToast ? "Link Copied!" : "Share Link"}
-          </button>
+          <SharePanel
+            title="Share this design"
+            shareUrl={shareUrl}
+            previewImageUrl={activeImageUrl}
+          />
 
           {/* Generate more */}
           <button

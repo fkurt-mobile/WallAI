@@ -23,17 +23,39 @@ function PinIcon({ className }: { className?: string }) {
 export function SharePanel({
   title = "Share Visualization",
   shareUrl = typeof window !== "undefined" ? window.location.href : "",
+  previewImageUrl,
 }: {
   title?: string;
   shareUrl?: string;
+  previewImageUrl?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const imageUrl = previewImageUrl || shareUrl;
+
+  const downloadImage = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, "_blank", "noreferrer");
+    }
+  };
 
   const platforms = [
     {
       name: "Email",
       icon: Mail,
-      href: `mailto:?subject=${encodeURIComponent("Wallpaper visualization")}&body=${encodeURIComponent(shareUrl)}`,
+      href: `mailto:?subject=${encodeURIComponent("Wallpaper Design Preview")}&body=${encodeURIComponent(shareUrl)}`,
     },
     {
       name: "WhatsApp",
@@ -46,14 +68,9 @@ export function SharePanel({
       href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
     },
     {
-      name: "Instagram",
-      icon: Instagram,
-      href: "https://www.instagram.com/",
-    },
-    {
       name: "Pinterest",
       icon: PinIcon,
-      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(shareUrl)}`,
+      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(shareUrl)}&media=${encodeURIComponent(imageUrl)}`,
     },
   ];
 
@@ -62,37 +79,20 @@ export function SharePanel({
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-      toast.success("Link copied to clipboard");
+      toast.success("Link copied");
     } catch {
       toast.error("Failed to copy link");
     }
   };
 
-  const downloadImage = async (format: "png" | "jpg") => {
-    try {
-      // Try fetching the image to download as blob
-      const res = await fetch(shareUrl, { mode: "cors" });
-      const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `visualization-${Date.now()}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(blobUrl);
-      toast.success(`Successfully downloaded ${format.toUpperCase()}`);
-    } catch (err) {
-      // Fallback: open in new tab if CORS blocks fetch
-      toast.info("Opening image in new tab for download...");
-      const a = document.createElement("a");
-      a.href = shareUrl;
-      a.target = "_blank";
-      a.download = `visualization.${format}`;
-      a.click();
+  const handleInstagram = async () => {
+    if (!imageUrl) {
+      toast.error("No image available to download");
+      return;
     }
+    await downloadImage(imageUrl, `visualization-${Date.now()}.jpg`);
+    toast.info("Download image and upload to Instagram.");
+    window.open("https://www.instagram.com/", "_blank", "noreferrer");
   };
 
   return (
@@ -123,6 +123,16 @@ export function SharePanel({
           );
         })}
         <button
+          onClick={handleInstagram}
+          title="Download image and upload to Instagram."
+          className="group flex flex-col items-center justify-center text-center gap-2 py-5 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 cursor-pointer"
+        >
+          <Instagram className="size-6 text-brand-900/70 group-hover:text-accent transition-colors shrink-0" />
+          <span className="text-[10px] uppercase tracking-[0.12em] text-brand-900/60 truncate max-w-full">
+            Instagram
+          </span>
+        </button>
+        <button
           onClick={copy}
           title="Copy link"
           className="group flex flex-col items-center justify-center text-center gap-2 py-5 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 cursor-pointer"
@@ -149,14 +159,14 @@ export function SharePanel({
 
       <p className="text-[10px] uppercase tracking-[0.22em] text-brand-900/45 mb-3">Download</p>
       <div className="grid grid-cols-2 gap-2">
-        <button 
-          onClick={() => downloadImage("png")}
+        <button
+          onClick={() => imageUrl && downloadImage(imageUrl, `visualization-${Date.now()}.png`)}
           className="flex items-center justify-center gap-2 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-800 transition-colors cursor-pointer"
         >
           <Download className="size-3.5" /> PNG
         </button>
-        <button 
-          onClick={() => downloadImage("jpg")}
+        <button
+          onClick={() => imageUrl && downloadImage(imageUrl, `visualization-${Date.now()}.jpg`)}
           className="flex items-center justify-center gap-2 border border-brand-900/15 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
         >
           <Download className="size-3.5" /> JPG
@@ -165,4 +175,3 @@ export function SharePanel({
     </div>
   );
 }
-
