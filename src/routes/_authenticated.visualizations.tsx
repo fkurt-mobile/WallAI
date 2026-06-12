@@ -75,15 +75,15 @@ function VisualizationsPage() {
           <p className="text-center font-serif text-2xl italic py-20">Loading visualizations...</p>
         ) : list.length === 0 ? (
           <div className="border border-dashed border-brand-900/15 bg-card py-24 px-8 text-center max-w-xl mx-auto">
-            <h2 className="font-serif text-3xl italic mb-3">No visualizations yet</h2>
+            <h2 className="font-serif text-3xl italic mb-3">No AI designs yet</h2>
             <p className="text-brand-900/55 mb-8">
-              Head to the visualizer to preview wallpapers in different rooms.
+              Use the AI Room Designer to generate photorealistic interior visualizations with your wallpapers.
             </p>
             <Link
               to="/tools/wallpaper-visualizer"
               className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
             >
-              Open Visualizer
+              ✨ Open AI Room Designer
             </Link>
           </div>
         ) : (

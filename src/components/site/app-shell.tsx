@@ -33,7 +33,7 @@ const NAV: NavItem[] = [
 ];
 
 const TOOLS: NavItem[] = [
-  { to: "/tools/wallpaper-visualizer", label: "Wallpaper Visualizer", icon: Sparkles },
+  { to: "/tools/wallpaper-visualizer", label: "✨ AI Room Designer", icon: Sparkles },
   { to: "/tools/image-crop", label: "Image Crop", icon: Crop },
 ];
 

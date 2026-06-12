@@ -1,8 +1,18 @@
-const STEPS = ["Wallpaper", "Room", "Adjust", "Result"];
+// WizardStepper — kept for backwards compatibility (no longer used by AI Room Designer)
+// The AI Room Designer uses its own AiDesignerStepper component inline.
 
-export function WizardStepper({ current }: { current: 1 | 2 | 3 | 4 }) {
+const STEPS = ["Wallpaper", "Room Type", "Style", "Mood", "Generate"];
+
+export function WizardStepper({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
+  const subtitles = [
+    "Select Wallpaper",
+    "Choose Room Type",
+    "Design Style",
+    "Set Mood",
+    "AI Generate",
+  ];
   return (
-    <div className="flex gap-6 md:gap-12 overflow-x-auto">
+    <div className="flex gap-6 md:gap-10 overflow-x-auto">
       {STEPS.map((label, idx) => {
         const step = idx + 1;
         const active = step === current;
@@ -23,15 +33,7 @@ export function WizardStepper({ current }: { current: 1 | 2 | 3 | 4 }) {
             >
               {String(step).padStart(2, "0")} {label}
             </span>
-            <span className="text-sm text-brand-900/60 mt-0.5">
-              {step === 1
-                ? "Select Wallpaper"
-                : step === 2
-                  ? "Select Room"
-                  : step === 3
-                    ? "Adjust Wall"
-                    : "Preview Result"}
-            </span>
+            <span className="text-sm text-brand-900/60 mt-0.5">{subtitles[idx]}</span>
           </div>
         );
       })}

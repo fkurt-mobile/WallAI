@@ -48,17 +48,19 @@ function Dashboard() {
     enabled: !!profile?.id,
   });
 
-  // Fetch active mockup rooms count
-  const { data: mockupsCount = 0 } = useQuery({
-    queryKey: ["mockups-count"],
+  // Fetch AI generations count
+  const { data: aiGenerationsCount = 0 } = useQuery({
+    queryKey: ["ai-generations-count", profile?.id],
     queryFn: async () => {
+      if (!profile?.id) return 0;
       const { count, error } = await supabase
-        .from("mockup_rooms")
+        .from("ai_generations" as any)
         .select("*", { count: "exact", head: true })
-        .eq("is_active", true);
-      if (error) throw error;
+        .eq("user_id", profile.id);
+      if (error) return 0;
       return count || 0;
     },
+    enabled: !!profile?.id,
   });
 
   // Fetch recently added wallpapers
@@ -103,7 +105,7 @@ function Dashboard() {
               to="/tools/wallpaper-visualizer"
               className="bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
             >
-              Try Wallpaper
+              ✨ AI Room Designer
             </Link>
           </div>
         </div>
@@ -114,7 +116,7 @@ function Dashboard() {
             label="Visualizations this month"
             value={isLoading ? "..." : String(visualizationsCount)}
           />
-          <Stat label="Active mockup rooms" value={isLoading ? "..." : String(mockupsCount)} />
+          <Stat label="AI designs generated" value={isLoading ? "..." : String(aiGenerationsCount)} />
         </div>
 
         <div className="flex items-baseline justify-between mb-6">
