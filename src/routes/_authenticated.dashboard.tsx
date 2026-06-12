@@ -20,17 +20,17 @@ function Dashboard() {
 
   // Fetch wallpapers count
   const { data: wallpapersCount = 0 } = useQuery({
-    queryKey: ["wallpapers-count", profile?.id],
+    queryKey: ["wallpapers-count", profile?.company_id],
     queryFn: async () => {
-      if (!profile?.id) return 0;
+      if (!profile?.company_id) return 0;
       const { count, error } = await supabase
         .from("wallpapers")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.id);
+        .eq("company_id", profile.company_id);
       if (error) throw error;
       return count || 0;
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.company_id,
   });
 
   // Fetch visualizations count
@@ -65,19 +65,19 @@ function Dashboard() {
 
   // Fetch recently added wallpapers
   const { data: recentWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["recent-wallpapers", profile?.id],
+    queryKey: ["recent-wallpapers", profile?.company_id],
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.company_id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("user_id", profile.id)
+        .eq("company_id", profile.company_id)
         .order("created_at", { ascending: false })
         .limit(6);
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.company_id,
   });
 
   const isLoading = profileLoading || wallpapersLoading;

@@ -148,20 +148,25 @@ export const Route = createFileRoute("/api/ai/generate-room")({
           }
 
           // ── 5. Create generation record up front so visualizations can link to it ─
+          const generationInsert: Database["public"]["Tables"]["ai_generations"]["Insert"] = {
+            company_id: companyId,
+            user_id: user.id,
+            wallpaper_id: wallpaperId,
+            room_type: roomType,
+            style,
+            mood,
+            custom_prompt: customPrompt || null,
+            variation_count: variationCount,
+            status: "pending",
+          };
+
+          if (referenceGenerationId) {
+            generationInsert.reference_generation_id = referenceGenerationId;
+          }
+
           const { data: generationRow, error: generationInsertError } = await supabase
             .from("ai_generations")
-            .insert({
-              company_id: companyId,
-              user_id: user.id,
-              wallpaper_id: wallpaperId,
-              room_type: roomType,
-              style,
-              mood,
-              custom_prompt: customPrompt || null,
-              reference_generation_id: referenceGenerationId || null,
-              variation_count: variationCount,
-              status: "pending",
-            })
+            .insert(generationInsert)
             .select("id")
             .single();
 

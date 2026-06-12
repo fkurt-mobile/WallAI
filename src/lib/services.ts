@@ -106,11 +106,18 @@ export const AuthService = {
 
 export const UsageService = {
   async getUsageStats(userId: string, companyId: string | null): Promise<UsageStats> {
-    // 1. Fetch user-specific wallpapers count
+    // 1. Fetch company wallpapers count
+    if (!companyId) return {
+      wallpapersCount: 0,
+      visualizationsCount: 0,
+      mockupsCount: 0,
+      chartData: [],
+      recentActivity: [],
+    };
     const { count: wallpapersCount, error: wError } = await supabase
       .from("wallpapers")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
+      .eq("company_id", companyId);
 
     if (wError) throw wError;
 

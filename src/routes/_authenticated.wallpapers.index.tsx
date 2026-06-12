@@ -30,19 +30,19 @@ function WallpaperList() {
 
   // Query real wallpapers from database
   const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["wallpapers", profile?.id],
+    queryKey: ["wallpapers", profile?.company_id],
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.company_id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("user_id", profile.id)
+        .eq("company_id", profile.company_id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.company_id,
   });
 
   const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({

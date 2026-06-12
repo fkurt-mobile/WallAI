@@ -171,17 +171,17 @@ function AiRoomDesigner() {
 
   // ── Fetch wallpapers ────────────────────────────────────────────────────────
   const { data: dbWallpapers = [], isLoading: wallpapersLoading } = useQuery({
-    queryKey: ["wallpapers", profile?.id],
+    queryKey: ["wallpapers", profile?.company_id],
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.company_id) return [];
       const { data, error } = await supabase
         .from("wallpapers")
         .select("*")
-        .eq("user_id", profile.id);
+        .eq("company_id", profile.company_id);
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.company_id,
   });
 
   const wallpapersList: Wallpaper[] = useMemo(
@@ -904,7 +904,7 @@ function InstructionsStep({
       <div className="flex flex-wrap items-center gap-3">
         <button
           id="generate-room-btn"
-          onClick={onGenerate}
+          onClick={() => onGenerate()}
           className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
         >
           <Sparkles className="size-3.5" />
@@ -983,7 +983,7 @@ function GeneratingScreen({
         <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
           <button
             id="retry-generation-btn"
-            onClick={onRetry}
+            onClick={() => onRetry()}
             className="bg-brand-900 text-brand-50 px-8 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer inline-flex items-center justify-center gap-2"
           >
             <RefreshCw className="size-3.5" /> Try Again
