@@ -443,8 +443,8 @@ function AiRoomDesigner() {
 
       {/* ── Sticky wallpaper bar ── */}
       {design.wallpaper && step !== "wallpaper" && step !== "generating" && step !== "result" && (
-        <div className="fixed bottom-0 inset-x-0 z-20 border-t border-brand-900/8 bg-card/95 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-6 lg:px-10 py-4 flex items-center gap-4">
+        <div className="fixed bottom-0 inset-x-0 lg:left-64 lg:right-0 z-30 border-t border-brand-900/8 bg-card/95 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
             <img
               src={design.wallpaper.image}
               alt={design.wallpaper.title}
@@ -459,7 +459,7 @@ function AiRoomDesigner() {
             <button
               type="button"
               onClick={() => setStep("wallpaper")}
-              className="text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent transition-colors shrink-0"
+              className="self-start sm:self-auto text-[11px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent transition-colors shrink-0"
             >
               Change
             </button>
