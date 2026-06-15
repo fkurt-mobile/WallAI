@@ -32,6 +32,41 @@ interface VisualizationRow {
   } | null;
 }
 
+interface AiGenerationRow {
+  id: string;
+  wallpaper_id: string | null;
+  room_type: string | null;
+  style?: string | null;
+  mood?: string | null;
+  created_at: string;
+  variation_1_url?: string | null;
+  variation_2_url?: string | null;
+  variation_3_url?: string | null;
+  variation_4_url?: string | null;
+}
+
+interface AiGenerationsClient {
+  from: (table: "ai_generations") => {
+    select: (columns: string) => {
+      eq: (
+        column: string,
+        value: string,
+      ) => {
+        order: (
+          column: string,
+          options: { ascending: boolean },
+        ) => Promise<{ data: AiGenerationRow[] | null; error: { message?: string } | null }>;
+      };
+    };
+  };
+}
+
+type VisualizationCard = VizPreview & {
+  wallpaperId?: string | null;
+  wallpaperTitle: string;
+  date: string;
+};
+
 function VisualizationsPage() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const { data: profile } = useProfile();
@@ -50,7 +85,7 @@ function VisualizationsPage() {
 
       if (error) throw error;
 
-      return (data as VisualizationRow[]).map((v) => ({
+      const mappedVisualizations: VisualizationCard[] = (data as VisualizationRow[]).map((v) => ({
         id: v.id,
         wallpaperId: v.wallpaper_id,
         wallpaperTitle: v.wallpapers?.title || "Deleted Wallpaper",
@@ -65,6 +100,57 @@ function VisualizationsPage() {
         }),
         image: v.result_image_url,
       }));
+
+      const seenUrls = new Set(mappedVisualizations.map((v) => v.image));
+      let mappedAiGenerations: VisualizationCard[] = [];
+
+      try {
+        const aiGenerationsClient = supabase as unknown as AiGenerationsClient;
+        const { data: aiGenerations, error: aiError } = await aiGenerationsClient
+          .from("ai_generations")
+          .select("*")
+          .eq("user_id", profile.id)
+          .order("created_at", { ascending: false });
+
+        if (!aiError && aiGenerations) {
+          mappedAiGenerations = aiGenerations.flatMap((generation) =>
+            [
+              generation.variation_1_url,
+              generation.variation_2_url,
+              generation.variation_3_url,
+              generation.variation_4_url,
+            ]
+              .filter((url): url is string => typeof url === "string" && url.length > 0)
+              .flatMap((url, index) => {
+                if (seenUrls.has(url)) return [];
+                seenUrls.add(url);
+                return [
+                  {
+                    id: `${generation.id}-${index}`,
+                    wallpaperId: generation.wallpaper_id,
+                    wallpaperTitle: "AI Room Design",
+                    room: generation.room_type || "Room",
+                    style: generation.style || null,
+                    mood: generation.mood || null,
+                    createdAt: generation.created_at,
+                    date: new Date(generation.created_at).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    }),
+                    image: url,
+                  },
+                ];
+              }),
+          );
+        }
+      } catch {
+        // Older projects may not have the ai_generations table.
+      }
+
+      return [...mappedVisualizations, ...mappedAiGenerations].sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+      );
     },
     enabled: !!companyId,
   });

@@ -152,6 +152,9 @@ export type Database = {
           source_type: string;
           result_image_url: string;
           room_type: string | null;
+          style: string | null;
+          mood: string | null;
+          custom_prompt: string | null;
           created_at: string;
         };
         Insert: {
@@ -163,6 +166,9 @@ export type Database = {
           source_type: string;
           result_image_url: string;
           room_type?: string | null;
+          style?: string | null;
+          mood?: string | null;
+          custom_prompt?: string | null;
           created_at?: string;
         };
         Update: {
@@ -174,6 +180,9 @@ export type Database = {
           source_type?: string;
           result_image_url?: string;
           room_type?: string | null;
+          style?: string | null;
+          mood?: string | null;
+          custom_prompt?: string | null;
           created_at?: string;
         };
         Relationships: [

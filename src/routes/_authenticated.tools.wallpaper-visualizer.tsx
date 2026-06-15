@@ -7,11 +7,14 @@ import {
   Sparkles,
   ChevronLeft,
   Download,
-  Share2,
-  RefreshCw,
   Plus,
   Check,
   Loader2,
+  Mail,
+  MessageCircle,
+  Facebook,
+  Instagram,
+  Link as LinkIcon,
   Home,
   BedDouble,
   Briefcase,
@@ -22,6 +25,7 @@ import {
   Hotel,
   Building2,
   Waypoints,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -286,6 +290,10 @@ function AiRoomDesigner() {
       setStep("result");
 
       queryClient.invalidateQueries({ queryKey: ["ai-generations"] });
+      queryClient.invalidateQueries({ queryKey: ["visualizations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["wallpaper-visualizations", design.wallpaper.id],
+      });
       toast.success("Your AI room designs are ready!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Generation failed. Please try again.";
@@ -329,7 +337,7 @@ function AiRoomDesigner() {
   return (
     <AppShell contentClassName="pb-32">
       {/* ── Top bar with stepper ── */}
-      {step !== "generating" && step !== "result" && (
+      {step !== "generating" && (
         <div className="border-b border-brand-900/5 bg-card sticky top-0 z-30">
           <div className="max-w-7xl mx-auto px-6 lg:px-10 py-5 flex items-center justify-between gap-6">
             <AiDesignerStepper current={stepNum} />
@@ -1046,6 +1054,14 @@ const downloadImage = async (url: string, filename: string) => {
   }
 };
 
+function PinterestIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M12 0C5.4 0 0 5.4 0 12c0 5 3.1 9.3 7.5 11-.1-.9-.2-2.4 0-3.4.2-.9 1.4-5.7 1.4-5.7s-.4-.7-.4-1.8c0-1.7 1-3 2.2-3 1 0 1.5.8 1.5 1.7 0 1-.7 2.6-1 4-.3 1.2.6 2.2 1.8 2.2 2.2 0 3.8-2.3 3.8-5.6 0-2.9-2.1-5-5.1-5-3.5 0-5.5 2.6-5.5 5.3 0 1 .4 2.2.9 2.8.1.1.1.2.1.3-.1.4-.3 1.2-.3 1.4-.1.2-.2.3-.4.2-1.5-.7-2.4-2.9-2.4-4.7 0-3.8 2.8-7.4 8-7.4 4.2 0 7.4 3 7.4 7 0 4.2-2.6 7.5-6.3 7.5-1.2 0-2.4-.6-2.8-1.4l-.8 2.9c-.3 1-1 2.3-1.5 3.1.4.1.9.2 1.4.2 6.6 0 12-5.4 12-12S18.6 0 12 0Z" />
+    </svg>
+  );
+}
+
 function ResultGallery({
   wallpaper,
   roomType,
@@ -1077,8 +1093,37 @@ function ResultGallery({
   const activeImage = generatedImages[activeIndex] || generatedImages[0];
   const activeImageUrl = activeImage?.url || "";
   const activeLabel = getVariationLabel(activeIndex);
+  const disabled = generating;
+  const sharePlatforms = [
+    {
+      name: "Email",
+      icon: Mail,
+      href: `mailto:?subject=${encodeURIComponent("Wallpaper visualization")}&body=${encodeURIComponent(activeImageUrl)}`,
+    },
+    {
+      name: "WhatsApp",
+      icon: MessageCircle,
+      href: `https://wa.me/?text=${encodeURIComponent(activeImageUrl)}`,
+    },
+    {
+      name: "Facebook",
+      icon: Facebook,
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(activeImageUrl)}`,
+    },
+    {
+      name: "Instagram",
+      icon: Instagram,
+      href: "https://www.instagram.com/",
+    },
+    {
+      name: "Pinterest",
+      icon: PinterestIcon,
+      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(activeImageUrl)}`,
+    },
+  ];
 
   const handleShare = async () => {
+    if (disabled) return;
     try {
       await navigator.clipboard.writeText(activeImageUrl);
       setShareToast(true);
@@ -1103,15 +1148,16 @@ function ResultGallery({
           <button
             id="create-new-design-btn"
             onClick={onCreateNew}
-            className="border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors cursor-pointer inline-flex items-center gap-2"
+            disabled={disabled}
+            className="border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
           >
             <Plus className="size-3.5" /> Create New Design
           </button>
           <button
             id="generate-more-btn"
             onClick={onGenerateMore}
-            disabled={generating}
-            className="bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-50"
+            disabled={disabled}
+            className="bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {generating ? (
               <>
@@ -1168,8 +1214,9 @@ function ResultGallery({
                     key={image.id}
                     id={`variation-${label}`}
                     onClick={() => onSelectImage(image.id)}
+                    disabled={disabled}
                     className={
-                      "group relative aspect-[4/3] overflow-hidden transition-all cursor-pointer " +
+                      "group relative aspect-[4/3] overflow-hidden transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 " +
                       (active
                         ? "outline outline-2 outline-accent outline-offset-2"
                         : "hover:outline hover:outline-1 hover:outline-accent/50 hover:outline-offset-1")
@@ -1217,7 +1264,8 @@ function ResultGallery({
               onClick={() =>
                 downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.png`)
               }
-              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
+              disabled={disabled}
+              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
             >
               <Download className="size-3.5" /> PNG
             </button>
@@ -1226,40 +1274,60 @@ function ResultGallery({
               onClick={() =>
                 downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.jpg`)
               }
-              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
+              disabled={disabled}
+              className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
             >
               <Download className="size-3.5" /> JPG
             </button>
           </div>
 
           {/* Share */}
-          <button
-            id="share-link-btn"
-            onClick={handleShare}
-            className="relative w-full inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
-          >
-            <Share2 className="size-3.5" />
-            {shareToast ? "Link Copied!" : "Share Link"}
-          </button>
-
-          {/* Generate more */}
-          <button
-            onClick={onGenerateMore}
-            disabled={generating}
-            className="w-full inline-flex items-center justify-center gap-2 bg-brand-900/5 border border-brand-900/8 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className="size-3.5" />
-            Generate More Like This
-          </button>
-
-          {/* Create new */}
-          <button
-            onClick={onCreateNew}
-            className="w-full inline-flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.2em] text-brand-900/50 hover:text-accent cursor-pointer transition-colors py-2"
-          >
-            <Plus className="size-3.5" />
-            Create New Design
-          </button>
+          <div className="bg-card border border-brand-900/8 p-5">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40 mb-3">Share</p>
+            <div className="grid grid-cols-3 gap-2">
+              {sharePlatforms.map((platform) => {
+                const Icon = platform.icon;
+                return (
+                  <a
+                    key={platform.name}
+                    href={disabled ? undefined : platform.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={disabled}
+                    tabIndex={disabled ? -1 : undefined}
+                    title={`Share via ${platform.name}`}
+                    className={
+                      "group flex min-w-0 flex-col items-center justify-center gap-2 border border-brand-900/10 px-2 py-4 text-center transition-colors " +
+                      (disabled
+                        ? "pointer-events-none opacity-45"
+                        : "hover:border-accent hover:bg-accent/5")
+                    }
+                  >
+                    <Icon className="size-5 shrink-0 text-brand-900/70 group-hover:text-accent transition-colors" />
+                    <span className="max-w-full truncate text-[9px] uppercase tracking-[0.12em] text-brand-900/55">
+                      {platform.name}
+                    </span>
+                  </a>
+                );
+              })}
+              <button
+                id="share-link-btn"
+                onClick={handleShare}
+                disabled={disabled}
+                title="Copy link"
+                className="group flex min-w-0 flex-col items-center justify-center gap-2 border border-brand-900/10 px-2 py-4 text-center transition-colors hover:border-accent hover:bg-accent/5 disabled:pointer-events-none disabled:opacity-45"
+              >
+                {shareToast ? (
+                  <Check className="size-5 shrink-0 text-accent" />
+                ) : (
+                  <LinkIcon className="size-5 shrink-0 text-brand-900/70 group-hover:text-accent transition-colors" />
+                )}
+                <span className="max-w-full truncate text-[9px] uppercase tracking-[0.12em] text-brand-900/55">
+                  {shareToast ? "Copied" : "Copy Link"}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

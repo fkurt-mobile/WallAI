@@ -82,7 +82,6 @@ export function VisualizationPreviewModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        hideClose
         className="p-0 gap-0 border-0 bg-brand-50 sm:rounded-lg overflow-hidden shadow-2xl"
         style={{ width: "85vw", maxWidth: "85vw", height: "85vh" }}
       >

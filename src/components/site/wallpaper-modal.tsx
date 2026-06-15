@@ -23,6 +23,35 @@ interface VisualizationHistoryRow {
   created_at?: string | null;
 }
 
+interface AiGenerationRow {
+  id: string;
+  wallpaper_id: string | null;
+  room_type: string | null;
+  style?: string | null;
+  mood?: string | null;
+  created_at: string;
+  variation_1_url?: string | null;
+  variation_2_url?: string | null;
+  variation_3_url?: string | null;
+  variation_4_url?: string | null;
+}
+
+interface AiGenerationsClient {
+  from: (table: "ai_generations") => {
+    select: (columns: string) => {
+      eq: (
+        column: string,
+        value: string,
+      ) => {
+        order: (
+          column: string,
+          options: { ascending: boolean },
+        ) => Promise<{ data: AiGenerationRow[] | null; error: { message?: string } | null }>;
+      };
+    };
+  };
+}
+
 export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Props) {
   const navigate = useNavigate();
   const [zoomed, setZoomed] = useState(false);
@@ -46,7 +75,7 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data as unknown as VisualizationHistoryRow[]).map((v) => ({
+      const mappedVisualizations = (data as unknown as VisualizationHistoryRow[]).map((v) => ({
         id: v.id,
         room: v.room_type || "Room",
         image: v.result_image_url,
@@ -55,6 +84,59 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
         mood: v.mood || null,
         createdAt: v.created_at || null,
       }));
+
+      const seenUrls = new Set(mappedVisualizations.map((v) => v.image));
+      let mappedAiGenerations: Array<{
+        id: string;
+        room: string;
+        image: string;
+        wallpaperTitle: string;
+        style: string | null;
+        mood: string | null;
+        createdAt: string | null;
+      }> = [];
+
+      try {
+        const aiGenerationsClient = supabase as unknown as AiGenerationsClient;
+        const { data: aiGenerations, error: aiError } = await aiGenerationsClient
+          .from("ai_generations")
+          .select("*")
+          .eq("wallpaper_id", wallpaper.id)
+          .order("created_at", { ascending: false });
+
+        if (!aiError && aiGenerations) {
+          mappedAiGenerations = aiGenerations.flatMap((generation) =>
+            [
+              generation.variation_1_url,
+              generation.variation_2_url,
+              generation.variation_3_url,
+              generation.variation_4_url,
+            ]
+              .filter((url): url is string => typeof url === "string" && url.length > 0)
+              .flatMap((url, index) => {
+                if (seenUrls.has(url)) return [];
+                seenUrls.add(url);
+                return [
+                  {
+                    id: `${generation.id}-${index}`,
+                    room: generation.room_type || "Room",
+                    image: url,
+                    wallpaperTitle: wallpaper.title,
+                    style: generation.style || null,
+                    mood: generation.mood || null,
+                    createdAt: generation.created_at || null,
+                  },
+                ];
+              }),
+          );
+        }
+      } catch {
+        // Older projects may not have the ai_generations table.
+      }
+
+      return [...mappedVisualizations, ...mappedAiGenerations].sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+      );
     },
     enabled: open && !!wallpaper?.id,
   });
@@ -96,7 +178,12 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
 
         <div className="grid grid-cols-1 lg:grid-cols-[65fr_35fr] h-full">
           {/* LEFT — preview */}
-          <div className="relative bg-brand-100 p-8 lg:p-12 flex items-center justify-center group overflow-hidden">
+          <div
+            className={
+              "relative bg-brand-100 flex items-center justify-center group overflow-hidden " +
+              (zoomed ? "p-0" : "p-8 lg:p-12")
+            }
+          >
             <button
               onClick={() => setZoomed((z) => !z)}
               className="absolute top-6 right-6 z-10 size-10 grid place-items-center rounded-full bg-card/90 backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity hover:bg-card cursor-pointer"
@@ -108,8 +195,10 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
               src={wallpaper.image}
               alt={wallpaper.title}
               className={
-                "max-w-full max-h-full object-contain rounded-md shadow-xl transition-transform duration-500 " +
-                (zoomed ? "scale-150 cursor-zoom-out" : "scale-100 cursor-zoom-in")
+                "transition-all duration-500 " +
+                (zoomed
+                  ? "h-full w-full object-cover rounded-none shadow-none cursor-zoom-out"
+                  : "max-w-full max-h-full object-contain rounded-md shadow-xl cursor-zoom-in")
               }
               onClick={() => setZoomed((z) => !z)}
             />

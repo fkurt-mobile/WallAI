@@ -31,6 +31,24 @@ interface AiGenerationsInsertClient {
   };
 }
 
+interface VisualizationsInsertClient {
+  from: (table: "visualizations") => {
+    insert: (values: Record<string, unknown>[]) => {
+      select: (columns: string) => Promise<{
+        data: Array<{
+          id: string;
+          result_image_url: string;
+          room_type?: string | null;
+          style?: string | null;
+          mood?: string | null;
+          created_at?: string | null;
+        }> | null;
+        error: { message?: string } | null;
+      }>;
+    };
+  };
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -258,6 +276,86 @@ export const Route = createFileRoute("/api/ai/generate-room")({
             console.warn("[Generate Room] DB insert failed (non-fatal):", getErrorMessage(dbErr));
           }
 
+          // ── 7. Insert one visualization record per generated image ─────────
+          const visualizationRows = variationUrls.map((url) => ({
+            company_id: companyId,
+            user_id: user.id,
+            wallpaper_id: wallpaperId,
+            mockup_room_id: null,
+            source_type: "ai_generated",
+            result_image_url: url,
+            room_type: roomType,
+            style,
+            mood,
+            custom_prompt: customPrompt || null,
+          }));
+
+          const visualizationsClient = supabase as unknown as VisualizationsInsertClient;
+          const insertVisualizations = async (
+            rows: Record<string, unknown>[],
+            includeMetadata = true,
+          ) =>
+            visualizationsClient
+              .from("visualizations")
+              .insert(rows)
+              .select(
+                includeMetadata
+                  ? "id,result_image_url,room_type,style,mood,created_at"
+                  : "id,result_image_url,room_type,created_at",
+              );
+
+          let visualizationRecords: Array<{
+            id: string;
+            result_image_url: string;
+            room_type?: string | null;
+            style?: string | null;
+            mood?: string | null;
+            created_at?: string | null;
+          }> | null = null;
+
+          try {
+            let { data, error } = await insertVisualizations(visualizationRows);
+
+            if (error) {
+              console.warn(
+                "[Generate Room] Visualization insert with metadata failed, retrying:",
+                error.message,
+              );
+              const rowsWithoutOptionalColumns = visualizationRows.map(
+                ({ style: _style, mood: _mood, custom_prompt: _customPrompt, ...row }) => row,
+              );
+              ({ data, error } = await insertVisualizations(rowsWithoutOptionalColumns, false));
+            }
+
+            if (error) {
+              console.warn(
+                "[Generate Room] Visualization insert with user_id failed, retrying:",
+                error.message,
+              );
+              const rowsWithoutUserId = visualizationRows.map(
+                ({
+                  style: _style,
+                  mood: _mood,
+                  custom_prompt: _customPrompt,
+                  user_id: _userId,
+                  ...row
+                }) => row,
+              );
+              ({ data, error } = await insertVisualizations(rowsWithoutUserId, false));
+            }
+
+            if (error) {
+              console.warn("[Generate Room] Visualization insert failed:", error.message);
+            } else {
+              visualizationRecords = data || [];
+            }
+          } catch (vizErr: unknown) {
+            console.warn(
+              "[Generate Room] Visualization insert failed (non-fatal):",
+              getErrorMessage(vizErr),
+            );
+          }
+
           console.log(`[Generate Room] Complete. Returning ${variationCount} variation URLs.`);
           return new Response(
             JSON.stringify({
@@ -271,6 +369,7 @@ export const Route = createFileRoute("/api/ai/generate-room")({
               variation_2_url: variationUrls[1] || null,
               variation_3_url: variationUrls[2] || null,
               variation_4_url: variationUrls[3] || null,
+              visualizations: visualizationRecords || [],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );
