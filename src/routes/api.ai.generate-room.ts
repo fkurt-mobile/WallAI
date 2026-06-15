@@ -6,7 +6,33 @@ import { Buffer } from "buffer";
 
 // Shim global WebSocket to prevent Supabase client initialization crash on Node < 22
 if (typeof globalThis.WebSocket === "undefined") {
-  globalThis.WebSocket = class {} as any;
+  globalThis.WebSocket = class {} as unknown as typeof WebSocket;
+}
+
+interface GenerateRoomBody {
+  wallpaperId?: string;
+  roomType?: string;
+  style?: string;
+  mood?: string;
+  customPrompt?: string;
+  variationCount?: number;
+}
+
+interface AiGenerationsInsertClient {
+  from: (table: "ai_generations") => {
+    insert: (values: Record<string, unknown>) => {
+      select: (columns: string) => {
+        single: () => Promise<{
+          data: { id: string } | null;
+          error: { message?: string } | null;
+        }>;
+      };
+    };
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export const Route = createFileRoute("/api/ai/generate-room")({
@@ -17,10 +43,10 @@ export const Route = createFileRoute("/api/ai/generate-room")({
           // ── 1. Authenticate ────────────────────────────────────────────────
           const authHeader = request.headers.get("authorization");
           if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return new Response(
-              JSON.stringify({ error: "Unauthorized: No token provided" }),
-              { status: 401, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Unauthorized: No token provided" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           const token = authHeader.replace("Bearer ", "");
@@ -31,10 +57,10 @@ export const Route = createFileRoute("/api/ai/generate-room")({
 
           if (!supabaseUrl || !supabaseKey) {
             console.error("[Generate Room] Missing Supabase env vars");
-            return new Response(
-              JSON.stringify({ error: "Server configuration error" }),
-              { status: 500, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Server configuration error" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
@@ -48,10 +74,10 @@ export const Route = createFileRoute("/api/ai/generate-room")({
           } = await supabase.auth.getUser();
 
           if (authError || !user) {
-            return new Response(
-              JSON.stringify({ error: "Unauthorized: Invalid token" }),
-              { status: 401, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Unauthorized: Invalid token" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           // ── 2. Profile / company ────────────────────────────────────────────
@@ -62,31 +88,40 @@ export const Route = createFileRoute("/api/ai/generate-room")({
             .single();
 
           if (profileError || !profile?.company_id) {
-            return new Response(
-              JSON.stringify({ error: "Profile or company not found" }),
-              { status: 404, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Profile or company not found" }), {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           const companyId = profile.company_id;
 
           // ── 3. Parse body ───────────────────────────────────────────────────
-          let body: any;
+          let body: GenerateRoomBody;
           try {
-            body = await request.json();
+            body = (await request.json()) as GenerateRoomBody;
           } catch {
-            return new Response(
-              JSON.stringify({ error: "Invalid JSON body" }),
-              { status: 400, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           const { wallpaperId, roomType, style, mood, customPrompt } = body;
+          const requestedVariationCount = Number(body.variationCount);
+          const variationCount =
+            Number.isInteger(requestedVariationCount) &&
+            requestedVariationCount >= 1 &&
+            requestedVariationCount <= 4
+              ? requestedVariationCount
+              : 2;
 
           if (!wallpaperId || !roomType || !style || !mood) {
             return new Response(
-              JSON.stringify({ error: "Missing required fields: wallpaperId, roomType, style, mood" }),
-              { status: 400, headers: { "Content-Type": "application/json" } }
+              JSON.stringify({
+                error: "Missing required fields: wallpaperId, roomType, style, mood",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
             );
           }
 
@@ -98,30 +133,30 @@ export const Route = createFileRoute("/api/ai/generate-room")({
             .single();
 
           if (wallpaperError || !wallpaper) {
-            return new Response(
-              JSON.stringify({ error: "Wallpaper not found" }),
-              { status: 404, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Wallpaper not found" }), {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           if (wallpaper.company_id !== companyId) {
-            return new Response(
-              JSON.stringify({ error: "Wallpaper not found" }),
-              { status: 404, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ error: "Wallpaper not found" }), {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           if (!process.env.XAI_API_KEY) {
             return new Response(
               JSON.stringify({ error: "AI generation service is temporarily unavailable." }),
-              { status: 503, headers: { "Content-Type": "application/json" } }
+              { status: 503, headers: { "Content-Type": "application/json" } },
             );
           }
 
-          // ── 5. Generate 4 variations in parallel ────────────────────────────
+          // ── 5. Generate requested variations in parallel ───────────────────
           console.log(
-            `[Generate Room] Generating 4 variations for wallpaper ${wallpaperId}`,
-            { roomType, style, mood }
+            `[Generate Room] Generating ${variationCount} variations for wallpaper ${wallpaperId}`,
+            { roomType, style, mood, variationCount },
           );
 
           const generateOne = async (variationIndex: number): Promise<string> => {
@@ -137,7 +172,8 @@ export const Route = createFileRoute("/api/ai/generate-room")({
 
               // Download the generated image
               const downloadRes = await fetch(imageUrl);
-              if (!downloadRes.ok) throw new Error(`Failed to download variation ${variationIndex + 1}`);
+              if (!downloadRes.ok)
+                throw new Error(`Failed to download variation ${variationIndex + 1}`);
               const arrayBuffer = await downloadRes.arrayBuffer();
               const imageBuffer = Buffer.from(arrayBuffer);
 
@@ -156,26 +192,34 @@ export const Route = createFileRoute("/api/ai/generate-room")({
                 .from("visualization-results")
                 .getPublicUrl(fileName);
 
-              console.log(`[Generate Room] Variation ${variationIndex + 1} stored: ${publicUrlData.publicUrl}`);
+              console.log(
+                `[Generate Room] Variation ${variationIndex + 1} stored: ${publicUrlData.publicUrl}`,
+              );
               return publicUrlData.publicUrl;
-            } catch (err: any) {
-              console.error(`[Generate Room] Variation ${variationIndex + 1} failed:`, err.message);
+            } catch (err: unknown) {
+              console.error(
+                `[Generate Room] Variation ${variationIndex + 1} failed:`,
+                getErrorMessage(err),
+              );
               throw err;
             }
           };
 
-          // Run all 4 in parallel
+          // Run requested count in parallel
           let variationUrls: string[];
           try {
-            variationUrls = await Promise.all([0, 1, 2, 3].map(generateOne));
-          } catch (err: any) {
-            console.error("[Generate Room] One or more variations failed:", err.message);
+            variationUrls = await Promise.all(
+              Array.from({ length: variationCount }, (_, index) => index).map(generateOne),
+            );
+          } catch (err: unknown) {
+            const errorMessage = getErrorMessage(err);
+            console.error("[Generate Room] One or more variations failed:", errorMessage);
             return new Response(
               JSON.stringify({
                 error: "AI generation failed. Please try again.",
-                details: err.message,
+                details: errorMessage,
               }),
-              { status: 500, headers: { "Content-Type": "application/json" } }
+              { status: 500, headers: { "Content-Type": "application/json" } },
             );
           }
 
@@ -183,9 +227,10 @@ export const Route = createFileRoute("/api/ai/generate-room")({
           console.log("[Generate Room] Inserting ai_generations record...");
 
           let generationId: string | null = null;
+          const aiGenerationsClient = supabase as unknown as AiGenerationsInsertClient;
           try {
-            const { data: gen, error: insertError } = await supabase
-              .from("ai_generations" as any)
+            const { data: gen, error: insertError } = await aiGenerationsClient
+              .from("ai_generations")
               .insert({
                 company_id: companyId,
                 user_id: user.id,
@@ -195,25 +240,25 @@ export const Route = createFileRoute("/api/ai/generate-room")({
                 mood,
                 custom_prompt: customPrompt || null,
                 status: "completed",
-                variation_1_url: variationUrls[0],
-                variation_2_url: variationUrls[1],
-                variation_3_url: variationUrls[2],
-                variation_4_url: variationUrls[3],
+                variation_1_url: variationUrls[0] || null,
+                variation_2_url: variationUrls[1] || null,
+                variation_3_url: variationUrls[2] || null,
+                variation_4_url: variationUrls[3] || null,
               })
               .select("id")
               .single();
 
             if (!insertError && gen) {
-              generationId = (gen as any).id;
+              generationId = gen.id;
             } else {
               console.warn("[Generate Room] DB insert warning:", insertError?.message);
             }
-          } catch (dbErr: any) {
+          } catch (dbErr: unknown) {
             // Non-fatal — we still return the URLs even if DB insert fails
-            console.warn("[Generate Room] DB insert failed (non-fatal):", dbErr.message);
+            console.warn("[Generate Room] DB insert failed (non-fatal):", getErrorMessage(dbErr));
           }
 
-          console.log("[Generate Room] Complete. Returning 4 variation URLs.");
+          console.log(`[Generate Room] Complete. Returning ${variationCount} variation URLs.`);
           return new Response(
             JSON.stringify({
               id: generationId,
@@ -221,21 +266,23 @@ export const Route = createFileRoute("/api/ai/generate-room")({
               room_type: roomType,
               style,
               mood,
-              variation_1_url: variationUrls[0],
-              variation_2_url: variationUrls[1],
-              variation_3_url: variationUrls[2],
-              variation_4_url: variationUrls[3],
+              variationCount,
+              variation_1_url: variationUrls[0] || null,
+              variation_2_url: variationUrls[1] || null,
+              variation_3_url: variationUrls[2] || null,
+              variation_4_url: variationUrls[3] || null,
             }),
-            { status: 200, headers: { "Content-Type": "application/json" } }
+            { status: 200, headers: { "Content-Type": "application/json" } },
           );
-        } catch (globalError: any) {
+        } catch (globalError: unknown) {
+          const errorMessage = getErrorMessage(globalError);
           console.error("[Generate Room] Unhandled error:", globalError);
           return new Response(
             JSON.stringify({
               error: "Unable to generate room design. Please try again.",
-              details: globalError.message,
+              details: errorMessage,
             }),
-            { status: 500, headers: { "Content-Type": "application/json" } }
+            { status: 500, headers: { "Content-Type": "application/json" } },
           );
         }
       },

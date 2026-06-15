@@ -55,14 +55,15 @@ interface DesignState {
   style: string;
   mood: string;
   customPrompt: string;
+  variationCount: number;
 }
 
 interface GenerationResult {
   id: string | null;
-  variation_1_url: string;
-  variation_2_url: string;
-  variation_3_url: string;
-  variation_4_url: string;
+  variation_1_url?: string | null;
+  variation_2_url?: string | null;
+  variation_3_url?: string | null;
+  variation_4_url?: string | null;
   visualizations?: Array<{
     id?: string | null;
     result_image_url?: string | null;
@@ -134,6 +135,8 @@ const PROMPT_EXAMPLES = [
   "Marble floors",
 ];
 
+const VARIATION_COUNT_OPTIONS = [1, 2, 3, 4];
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 function AiRoomDesigner() {
@@ -149,6 +152,7 @@ function AiRoomDesigner() {
     style: "",
     mood: "",
     customPrompt: "",
+    variationCount: 2,
   });
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
@@ -240,6 +244,7 @@ function AiRoomDesigner() {
           style: design.style,
           mood: design.mood,
           customPrompt: design.customPrompt || undefined,
+          variationCount: design.variationCount,
         }),
       });
 
@@ -292,7 +297,14 @@ function AiRoomDesigner() {
   };
 
   const resetAll = () => {
-    setDesign({ wallpaper: null, roomType: "", style: "", mood: "", customPrompt: "" });
+    setDesign({
+      wallpaper: null,
+      roomType: "",
+      style: "",
+      mood: "",
+      customPrompt: "",
+      variationCount: 2,
+    });
     setResult(null);
     setGeneratedImages([]);
     setSelectedImageId(null);
@@ -383,6 +395,8 @@ function AiRoomDesigner() {
             roomType={design.roomType}
             style={design.style}
             mood={design.mood}
+            variationCount={design.variationCount}
+            onVariationCountChange={(count) => setDesign((d) => ({ ...d, variationCount: count }))}
             onGenerate={handleGenerate}
             onBack={() => setStep("mood")}
           />
@@ -392,6 +406,7 @@ function AiRoomDesigner() {
         {step === "generating" && (
           <GeneratingScreen
             wallpaper={design.wallpaper!}
+            variationCount={design.variationCount}
             error={genError}
             onRetry={handleGenerate}
             onBack={() => {
@@ -464,7 +479,7 @@ function extractGeneratedImages(data: GenerationResult): GeneratedImage[] {
   if (fromRecords.length > 0) return fromRecords;
 
   return [data.variation_1_url, data.variation_2_url, data.variation_3_url, data.variation_4_url]
-    .filter(Boolean)
+    .filter((url): url is string => typeof url === "string" && url.length > 0)
     .map((url, index) => ({
       id: `${data.id || "generation"}-${index}-${url}`,
       url,
@@ -778,6 +793,8 @@ function InstructionsStep({
   roomType,
   style,
   mood,
+  variationCount,
+  onVariationCountChange,
   onGenerate,
   onBack,
 }: {
@@ -787,6 +804,8 @@ function InstructionsStep({
   roomType: string;
   style: string;
   mood: string;
+  variationCount: number;
+  onVariationCountChange: (count: number) => void;
   onGenerate: () => void;
   onBack: () => void;
 }) {
@@ -817,6 +836,32 @@ function InstructionsStep({
       </div>
 
       <div className="max-w-xl mb-6">
+        <div className="mb-6">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40 mb-3">
+            Number of Variations
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {VARIATION_COUNT_OPTIONS.map((count) => {
+              const active = variationCount === count;
+              return (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => onVariationCountChange(count)}
+                  className={
+                    "border px-4 py-3 text-center text-[11px] uppercase tracking-[0.18em] transition-colors cursor-pointer " +
+                    (active
+                      ? "border-accent bg-accent/5 text-accent"
+                      : "border-brand-900/12 bg-card hover:border-accent hover:text-accent")
+                  }
+                >
+                  {count}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <textarea
           id="custom-prompt-input"
           value={value}
@@ -853,7 +898,8 @@ function InstructionsStep({
       </div>
 
       <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/35 mt-4">
-        AI will generate 4 unique variations · Takes 30–90 seconds
+        AI will generate {variationCount} unique variation{variationCount === 1 ? "" : "s"} · Takes
+        30–90 seconds
       </p>
     </section>
   );
@@ -863,11 +909,13 @@ function InstructionsStep({
 
 function GeneratingScreen({
   wallpaper,
+  variationCount,
   error,
   onRetry,
   onBack,
 }: {
   wallpaper: Wallpaper;
+  variationCount: number;
   error: string | null;
   onRetry: () => void;
   onBack: () => void;
@@ -878,13 +926,13 @@ function GeneratingScreen({
   useEffect(() => {
     if (error) return;
     const start = Date.now();
-    const duration = 75000; // ~75s estimate for 4×2-step generations
+    const duration = Math.max(30000, variationCount * 18000);
     const tick = setInterval(() => {
       const p = Math.min(92, ((Date.now() - start) / duration) * 100);
       setProgress(p);
     }, 200);
     return () => clearInterval(tick);
-  }, [error]);
+  }, [error, variationCount]);
 
   useEffect(() => {
     if (error) return;
@@ -967,7 +1015,9 @@ function GeneratingScreen({
       <div className="flex items-center gap-6 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
         <span>{Math.round(progress)}%</span>
         <span>·</span>
-        <span>Generating 4 variations</span>
+        <span>
+          Generating {variationCount} variation{variationCount === 1 ? "" : "s"}
+        </span>
         <span>·</span>
         <span>~30–90 seconds</span>
       </div>
