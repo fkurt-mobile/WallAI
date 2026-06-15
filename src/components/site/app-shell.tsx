@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   Images,
+  ImageIcon,
   Sparkles,
   Wrench,
   Crop,
@@ -26,21 +27,29 @@ interface NavItem {
   group?: string;
 }
 
+function getCompanyDisplayName(companies: unknown, fallback: string) {
+  if (companies && typeof companies === "object" && "name" in companies) {
+    const name = (companies as { name?: unknown }).name;
+    if (typeof name === "string" && name.trim()) return name;
+  }
+  return fallback;
+}
+
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/wallpapers", label: "Wallpapers", icon: Images },
-  { to: "/visualizations", label: "Visualizations", icon: Sparkles },
+  { to: "/visualizations", label: "Visualizations", icon: ImageIcon },
 ];
 
 const TOOLS: NavItem[] = [
-  { to: "/tools/wallpaper-visualizer", label: "✨ AI Room Designer", icon: Sparkles },
+  { to: "/tools/wallpaper-visualizer", label: "AI Room Designer", icon: Sparkles },
   { to: "/tools/image-crop", label: "Image Crop", icon: Crop },
 ];
 
 const MOBILE_TABS: NavItem[] = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/wallpapers", label: "Wallpapers", icon: Images },
-  { to: "/visualizations", label: "Visuals", icon: Sparkles },
+  { to: "/visualizations", label: "Visuals", icon: ImageIcon },
   { to: "/profile", label: "Profile", icon: User },
 ];
 
@@ -87,11 +96,11 @@ function MobileTopBar({ onMenu }: { onMenu: () => void }) {
         Murra.
       </Link>
       <button
-          type="button"
-          onClick={onMenu}
-          aria-label="Open menu"
-          className="size-9 grid place-items-center -mr-2 text-brand-900/70 hover:text-brand-900"
-        >
+        type="button"
+        onClick={onMenu}
+        aria-label="Open menu"
+        className="size-9 grid place-items-center -mr-2 text-brand-900/70 hover:text-brand-900"
+      >
         <Menu className="size-5" />
       </button>
     </header>
@@ -110,9 +119,19 @@ function MobileDrawer({
   const logout = useLogout();
   const { data: profile, isLoading } = useProfile();
 
-  const displayName = profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
-  const displayCompany = (profile?.companies as any)?.name || (isLoading ? "Loading..." : "Company Account");
-  const avatarLetter = (profile?.full_name?.trim() ? profile.full_name.trim()[0] : (profile?.email?.trim() ? profile.email.trim()[0] : "U")).toUpperCase();
+  const displayName =
+    profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
+  const displayCompany = getCompanyDisplayName(
+    profile?.companies,
+    isLoading ? "Loading..." : "Company Account",
+  );
+  const avatarLetter = (
+    profile?.full_name?.trim()
+      ? profile.full_name.trim()[0]
+      : profile?.email?.trim()
+        ? profile.email.trim()[0]
+        : "U"
+  ).toUpperCase();
 
   return (
     <div
@@ -207,10 +226,19 @@ function Sidebar() {
   const logout = useLogout();
   const { data: profile, isLoading } = useProfile();
 
-  const displayName = profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
-  const displayCompany = (profile?.companies as any)?.name || (isLoading ? "Loading..." : "Company Account");
-  const avatarLetter = (profile?.full_name?.trim() ? profile.full_name.trim()[0] : (profile?.email?.trim() ? profile.email.trim()[0] : "U")).toUpperCase();
-
+  const displayName =
+    profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
+  const displayCompany = getCompanyDisplayName(
+    profile?.companies,
+    isLoading ? "Loading..." : "Company Account",
+  );
+  const avatarLetter = (
+    profile?.full_name?.trim()
+      ? profile.full_name.trim()[0]
+      : profile?.email?.trim()
+        ? profile.email.trim()[0]
+        : "U"
+  ).toUpperCase();
 
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 z-40 w-64 flex-col bg-card border-r border-brand-900/8">
@@ -297,8 +325,7 @@ function NavGroup({
           </span>
           <ChevronDown
             className={
-              "size-3 transition-transform duration-200 " +
-              (isOpen ? "rotate-180" : "rotate-0")
+              "size-3 transition-transform duration-200 " + (isOpen ? "rotate-180" : "rotate-0")
             }
           />
         </button>
@@ -341,4 +368,3 @@ function NavGroup({
     </div>
   );
 }
-

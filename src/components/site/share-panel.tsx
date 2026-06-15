@@ -23,9 +23,11 @@ function PinIcon({ className }: { className?: string }) {
 export function SharePanel({
   title = "Share Visualization",
   shareUrl = typeof window !== "undefined" ? window.location.href : "",
+  compact = false,
 }: {
   title?: string;
   shareUrl?: string;
+  compact?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -74,13 +76,13 @@ export function SharePanel({
       const res = await fetch(shareUrl, { mode: "cors" });
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
-      
+
       const a = document.createElement("a");
       a.href = blobUrl;
       a.download = `visualization-${Date.now()}.${format}`;
       document.body.appendChild(a);
       a.click();
-      
+
       document.body.removeChild(a);
       window.URL.revokeObjectURL(blobUrl);
       toast.success(`Successfully downloaded ${format.toUpperCase()}`);
@@ -96,14 +98,20 @@ export function SharePanel({
   };
 
   return (
-    <div className="bg-card border border-brand-900/8 p-7 lg:p-8">
+    <div
+      className={
+        "bg-card border border-brand-900/8 " + (compact ? "p-5 lg:p-6 pb-6" : "p-7 lg:p-8")
+      }
+    >
       <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">Share</p>
-      <h3 className="font-serif text-3xl italic mt-2 mb-1">{title}</h3>
-      <p className="text-xs text-brand-900/55 mb-7">
+      <h3 className={"font-serif italic mt-2 mb-1 " + (compact ? "text-2xl" : "text-3xl")}>
+        {title}
+      </h3>
+      <p className={"text-xs text-brand-900/55 " + (compact ? "mb-5" : "mb-7")}>
         Send this preview to clients, colleagues, or save the link.
       </p>
 
-      <div className="grid grid-cols-3 gap-2 mb-6">
+      <div className={"grid grid-cols-3 gap-2 " + (compact ? "mb-5" : "mb-6")}>
         {platforms.map((p) => {
           const Icon = p.icon;
           return (
@@ -113,7 +121,10 @@ export function SharePanel({
               target="_blank"
               rel="noreferrer"
               title={`Share via ${p.name}`}
-              className="group flex flex-col items-center justify-center text-center gap-2 py-5 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0"
+              className={
+                "group flex flex-col items-center justify-center text-center gap-2 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 " +
+                (compact ? "py-4" : "py-5")
+              }
             >
               <Icon className="size-6 text-brand-900/70 group-hover:text-accent transition-colors shrink-0" />
               <span className="text-[10px] uppercase tracking-[0.12em] text-brand-900/60 truncate max-w-full">
@@ -125,7 +136,10 @@ export function SharePanel({
         <button
           onClick={copy}
           title="Copy link"
-          className="group flex flex-col items-center justify-center text-center gap-2 py-5 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 cursor-pointer"
+          className={
+            "group flex flex-col items-center justify-center text-center gap-2 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 cursor-pointer " +
+            (compact ? "py-4" : "py-5")
+          }
         >
           {copied ? (
             <Check className="size-6 text-accent shrink-0" />
@@ -138,24 +152,29 @@ export function SharePanel({
         </button>
       </div>
 
-      <div className="flex items-center gap-2 border border-brand-900/12 px-3 py-2.5 mb-7 bg-brand-50/40">
+      <div
+        className={
+          "flex items-center gap-2 border border-brand-900/12 px-3 py-2.5 bg-brand-50/40 " +
+          (compact ? "mb-5" : "mb-7")
+        }
+      >
         <Link2 className="size-3.5 text-brand-900/40 shrink-0" />
         <span className="truncate text-brand-900/55 font-mono text-[11px] min-w-0 flex-1">
           {shareUrl || "share-link"}
         </span>
       </div>
 
-      <div className="h-px bg-brand-900/8 mb-6" />
+      <div className={"h-px bg-brand-900/8 " + (compact ? "mb-5" : "mb-6")} />
 
       <p className="text-[10px] uppercase tracking-[0.22em] text-brand-900/45 mb-3">Download</p>
       <div className="grid grid-cols-2 gap-2">
-        <button 
+        <button
           onClick={() => downloadImage("png")}
           className="flex items-center justify-center gap-2 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-800 transition-colors cursor-pointer"
         >
           <Download className="size-3.5" /> PNG
         </button>
-        <button 
+        <button
           onClick={() => downloadImage("jpg")}
           className="flex items-center justify-center gap-2 border border-brand-900/15 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
         >
@@ -165,4 +184,3 @@ export function SharePanel({
     </div>
   );
 }
-

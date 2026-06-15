@@ -14,10 +14,19 @@ interface Props {
   onDelete?: (id: string, imageUrl: string) => void;
 }
 
+interface VisualizationHistoryRow {
+  id: string;
+  result_image_url: string;
+  room_type: string | null;
+  style?: string | null;
+  mood?: string | null;
+  created_at?: string | null;
+}
+
 export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Props) {
   const navigate = useNavigate();
   const [zoomed, setZoomed] = useState(false);
-  const [preview, setPreview] = useState<VizPreview | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -32,16 +41,19 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
       if (!wallpaper?.id) return [];
       const { data, error } = await supabase
         .from("visualizations")
-        .select("id, result_image_url, room_type")
+        .select("*")
         .eq("wallpaper_id", wallpaper.id)
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
-      return data.map((v) => ({
+      return (data as unknown as VisualizationHistoryRow[]).map((v) => ({
         id: v.id,
         room: v.room_type || "Room",
         image: v.result_image_url,
         wallpaperTitle: wallpaper.title,
+        style: v.style || null,
+        mood: v.mood || null,
+        createdAt: v.created_at || null,
       }));
     },
     enabled: open && !!wallpaper?.id,
@@ -122,13 +134,13 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
               </button>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <button 
+                <button
                   onClick={editWallpaper}
                   className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <Pencil className="size-3.5" /> Edit
                 </button>
-                <button 
+                <button
                   onClick={deleteWallpaper}
                   className="flex items-center justify-center gap-2 border border-brand-900/12 py-3 text-[11px] uppercase tracking-[0.18em] text-destructive hover:bg-destructive/5 transition-colors cursor-pointer"
                 >
@@ -184,17 +196,10 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
                   id="viz-history-scroll"
                   className="flex gap-3 overflow-x-auto -mx-1 px-1 pb-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
-                  {history.map((h) => (
+                  {history.map((h, index) => (
                     <button
                       key={h.id}
-                      onClick={() =>
-                        setPreview({
-                          id: h.id,
-                          image: h.image,
-                          room: h.room,
-                          wallpaperTitle: wallpaper.title,
-                        })
-                      }
+                      onClick={() => setPreviewIndex(index)}
                       className="group/thumb shrink-0 text-left cursor-pointer"
                     >
                       <div className="size-[120px] overflow-hidden rounded-md bg-brand-100">
@@ -228,9 +233,12 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
         </div>
       </DialogContent>
       <VisualizationPreviewModal
-        viz={preview}
-        open={!!preview}
-        onOpenChange={(o) => !o && setPreview(null)}
+        viz={previewIndex === null ? null : history[previewIndex]}
+        visualizations={history as VizPreview[]}
+        currentIndex={previewIndex ?? 0}
+        onSelectIndex={setPreviewIndex}
+        open={previewIndex !== null}
+        onOpenChange={(o) => !o && setPreviewIndex(null)}
       />
     </Dialog>
   );
@@ -244,4 +252,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
