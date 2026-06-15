@@ -19,8 +19,21 @@ export const Route = createFileRoute("/_authenticated/visualizations")({
   component: VisualizationsPage,
 });
 
+interface VisualizationRow {
+  id: string;
+  wallpaper_id: string | null;
+  result_image_url: string;
+  room_type: string | null;
+  style?: string | null;
+  mood?: string | null;
+  created_at: string;
+  wallpapers?: {
+    title?: string | null;
+  } | null;
+}
+
 function VisualizationsPage() {
-  const [active, setActive] = useState<VizPreview | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const { data: profile } = useProfile();
   const companyId = profile?.company_id;
 
@@ -37,11 +50,14 @@ function VisualizationsPage() {
 
       if (error) throw error;
 
-      return data.map((v: any) => ({
+      return (data as VisualizationRow[]).map((v) => ({
         id: v.id,
         wallpaperId: v.wallpaper_id,
         wallpaperTitle: v.wallpapers?.title || "Deleted Wallpaper",
         room: v.room_type || "Room",
+        style: v.style || null,
+        mood: v.mood || null,
+        createdAt: v.created_at,
         date: new Date(v.created_at).toLocaleDateString("en-GB", {
           day: "2-digit",
           month: "short",
@@ -77,7 +93,8 @@ function VisualizationsPage() {
           <div className="border border-dashed border-brand-900/15 bg-card py-24 px-8 text-center max-w-xl mx-auto">
             <h2 className="font-serif text-3xl italic mb-3">No AI designs yet</h2>
             <p className="text-brand-900/55 mb-8">
-              Use the AI Room Designer to generate photorealistic interior visualizations with your wallpapers.
+              Use the AI Room Designer to generate photorealistic interior visualizations with your
+              wallpapers.
             </p>
             <Link
               to="/tools/wallpaper-visualizer"
@@ -88,19 +105,24 @@ function VisualizationsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7">
-            {list.map((v) => (
+            {list.map((v, index) => (
               <article
                 key={v.id}
                 className="bg-card border border-brand-900/8 overflow-hidden flex flex-col"
               >
-                <div className="aspect-[4/3] overflow-hidden bg-brand-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  className="group/image aspect-[4/3] overflow-hidden bg-brand-100 cursor-pointer"
+                  aria-label={`Preview ${v.wallpaperTitle}`}
+                >
                   <img
                     src={v.image}
                     alt={v.wallpaperTitle}
                     loading="lazy"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-105"
                   />
-                </div>
+                </button>
                 <div className="p-6 flex-1 flex flex-col">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
                     {v.room}
@@ -109,13 +131,13 @@ function VisualizationsPage() {
                   <p className="text-xs text-brand-900/50 mt-1">Created {v.date}</p>
                   <div className="mt-5 flex gap-2">
                     <button
-                      onClick={() => setActive(v)}
+                      onClick={() => setActiveIndex(index)}
                       className="flex-1 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
                     >
                       View →
                     </button>
                     <button
-                      onClick={() => setActive(v)}
+                      onClick={() => setActiveIndex(index)}
                       className="border border-brand-900/12 px-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-50 transition-colors cursor-pointer"
                     >
                       Share
@@ -128,9 +150,12 @@ function VisualizationsPage() {
         )}
       </div>
       <VisualizationPreviewModal
-        viz={active}
-        open={!!active}
-        onOpenChange={(o) => !o && setActive(null)}
+        viz={activeIndex === null ? null : list[activeIndex]}
+        visualizations={list}
+        currentIndex={activeIndex ?? 0}
+        onSelectIndex={setActiveIndex}
+        open={activeIndex !== null}
+        onOpenChange={(o) => !o && setActiveIndex(null)}
       />
     </AppShell>
   );

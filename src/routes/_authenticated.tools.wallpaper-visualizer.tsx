@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { z } from "zod";
 import { AppShell } from "@/components/site/app-shell";
 import { type Wallpaper } from "@/lib/wallpapers/data";
@@ -47,14 +47,7 @@ export const Route = createFileRoute("/_authenticated/tools/wallpaper-visualizer
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type Step =
-  | "wallpaper"
-  | "room-type"
-  | "style"
-  | "mood"
-  | "instructions"
-  | "generating"
-  | "result";
+type Step = "wallpaper" | "room-type" | "style" | "mood" | "instructions" | "generating" | "result";
 
 interface DesignState {
   wallpaper: Wallpaper | null;
@@ -70,6 +63,17 @@ interface GenerationResult {
   variation_2_url: string;
   variation_3_url: string;
   variation_4_url: string;
+  visualizations?: Array<{
+    id?: string | null;
+    result_image_url?: string | null;
+    preview_image_url?: string | null;
+  }>;
+}
+
+interface GeneratedImage {
+  id: string;
+  url: string;
+  visualizationId?: string | null;
 }
 
 // ── Option Data ────────────────────────────────────────────────────────────────
@@ -147,7 +151,8 @@ function AiRoomDesigner() {
     customPrompt: "",
   });
   const [result, setResult] = useState<GenerationResult | null>(null);
-  const [activeVariation, setActiveVariation] = useState(0);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -166,14 +171,18 @@ function AiRoomDesigner() {
     enabled: !!profile?.id,
   });
 
-  const wallpapersList: Wallpaper[] = dbWallpapers.map((w) => ({
-    id: w.id,
-    code: w.product_code,
-    title: w.title,
-    category: w.category,
-    image: w.image_url,
-    tint: "",
-  }));
+  const wallpapersList: Wallpaper[] = useMemo(
+    () =>
+      dbWallpapers.map((w) => ({
+        id: w.id,
+        code: w.product_code,
+        title: w.title,
+        category: w.category,
+        image: w.image_url,
+        tint: "",
+      })),
+    [dbWallpapers],
+  );
 
   // ── Load wallpaper from query param ────────────────────────────────────────
   useEffect(() => {
@@ -184,7 +193,7 @@ function AiRoomDesigner() {
         setStep("room-type");
       }
     }
-  }, [search.wallpaper, dbWallpapers]);
+  }, [search.wallpaper, wallpapersList]);
 
   // ── Auth helper ────────────────────────────────────────────────────────────
   const getToken = async () => {
@@ -207,10 +216,15 @@ function AiRoomDesigner() {
       return;
     }
 
-    setStep("generating");
+    const isAppending = step === "result" && generatedImages.length > 0;
+    if (!isAppending) {
+      setStep("generating");
+      setResult(null);
+      setGeneratedImages([]);
+      setSelectedImageId(null);
+    }
     setGenerating(true);
     setGenError(null);
-    setResult(null);
 
     try {
       const token = await getToken();
@@ -234,19 +248,42 @@ function AiRoomDesigner() {
         try {
           const errData = await response.json();
           if (errData.error) errMsg = errData.error;
-        } catch (_) {}
+        } catch {
+          // Keep the generic message when the error body is not JSON.
+        }
         throw new Error(errMsg);
       }
 
       const data = await response.json();
+      const nextImages = extractGeneratedImages(data);
       setResult(data);
-      setActiveVariation(0);
+      setGeneratedImages((current) => {
+        const seen = new Set(current.map((image) => image.visualizationId || image.url));
+        const merged = [...current];
+        nextImages.forEach((image) => {
+          const dedupeKey = image.visualizationId || image.url;
+          if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey);
+            merged.push(image);
+          }
+        });
+        return merged;
+      });
+      if (nextImages[0]) {
+        const firstNewImage = nextImages[0];
+        const existingImage = generatedImages.find(
+          (image) =>
+            image.url === firstNewImage.url ||
+            (image.visualizationId && image.visualizationId === firstNewImage.visualizationId),
+        );
+        setSelectedImageId(existingImage?.id || firstNewImage.id);
+      }
       setStep("result");
 
       queryClient.invalidateQueries({ queryKey: ["ai-generations"] });
       toast.success("Your AI room designs are ready!");
-    } catch (err: any) {
-      const message = err.message || "Generation failed. Please try again.";
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Generation failed. Please try again.";
       setGenError(message);
       toast.error(message);
     } finally {
@@ -257,30 +294,25 @@ function AiRoomDesigner() {
   const resetAll = () => {
     setDesign({ wallpaper: null, roomType: "", style: "", mood: "", customPrompt: "" });
     setResult(null);
-    setActiveVariation(0);
+    setGeneratedImages([]);
+    setSelectedImageId(null);
     setGenError(null);
     setStep("wallpaper");
   };
 
   // ── Step number for header stepper ────────────────────────────────────────
   const stepNum =
-    step === "wallpaper" ? 1 :
-    step === "room-type" ? 2 :
-    step === "style" ? 3 :
-    step === "mood" ? 4 :
-    step === "instructions" ? 5 : 5;
-
-  // ── Variation URLs array ───────────────────────────────────────────────────
-  const variations = result
-    ? [
-        result.variation_1_url,
-        result.variation_2_url,
-        result.variation_3_url,
-        result.variation_4_url,
-      ].filter(Boolean)
-    : [];
-
-  const activeImageUrl = variations[activeVariation] || "";
+    step === "wallpaper"
+      ? 1
+      : step === "room-type"
+        ? 2
+        : step === "style"
+          ? 3
+          : step === "mood"
+            ? 4
+            : step === "instructions"
+              ? 5
+              : 5;
 
   return (
     <AppShell contentClassName="pb-32">
@@ -370,16 +402,15 @@ function AiRoomDesigner() {
         )}
 
         {/* ── Result Gallery ── */}
-        {step === "result" && result && design.wallpaper && (
+        {step === "result" && result && design.wallpaper && generatedImages.length > 0 && (
           <ResultGallery
             wallpaper={design.wallpaper}
             roomType={design.roomType}
             style={design.style}
             mood={design.mood}
-            variations={variations}
-            activeVariation={activeVariation}
-            onSelectVariation={setActiveVariation}
-            activeImageUrl={activeImageUrl}
+            generatedImages={generatedImages}
+            selectedImageId={selectedImageId}
+            onSelectImage={setSelectedImageId}
             onGenerateMore={handleGenerate}
             onCreateNew={resetAll}
             generating={generating}
@@ -416,6 +447,31 @@ function AiRoomDesigner() {
   );
 }
 
+function extractGeneratedImages(data: GenerationResult): GeneratedImage[] {
+  const fromRecords: GeneratedImage[] =
+    data.visualizations?.flatMap((visualization, index) => {
+      const url = visualization.preview_image_url || visualization.result_image_url;
+      if (!url) return [];
+      return [
+        {
+          id: visualization.id || `${data.id || "generation"}-${index}-${url}`,
+          url,
+          visualizationId: visualization.id || null,
+        },
+      ];
+    }) || [];
+
+  if (fromRecords.length > 0) return fromRecords;
+
+  return [data.variation_1_url, data.variation_2_url, data.variation_3_url, data.variation_4_url]
+    .filter(Boolean)
+    .map((url, index) => ({
+      id: `${data.id || "generation"}-${index}-${url}`,
+      url,
+      visualizationId: null,
+    }));
+}
+
 // ── Stepper ────────────────────────────────────────────────────────────────────
 
 function AiDesignerStepper({ current }: { current: number }) {
@@ -435,8 +491,8 @@ function AiDesignerStepper({ current }: { current: number }) {
                   (done
                     ? "bg-accent text-brand-950"
                     : active
-                    ? "bg-brand-900 text-brand-50"
-                    : "bg-brand-900/10 text-brand-900/40")
+                      ? "bg-brand-900 text-brand-50"
+                      : "bg-brand-900/10 text-brand-900/40")
                 }
               >
                 {done ? <Check className="size-3" /> : num}
@@ -451,11 +507,7 @@ function AiDesignerStepper({ current }: { current: number }) {
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div
-                className={
-                  "w-6 h-px mx-2 " + (done ? "bg-accent" : "bg-brand-900/15")
-                }
-              />
+              <div className={"w-6 h-px mx-2 " + (done ? "bg-accent" : "bg-brand-900/15")} />
             )}
           </div>
         );
@@ -521,7 +573,9 @@ function SelectWallpaper({
                   </span>
                 </div>
               </div>
-              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{w.code}</p>
+              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+                {w.code}
+              </p>
               <p className="text-sm font-medium">{w.title}</p>
             </button>
           ))}
@@ -574,7 +628,8 @@ function RoomTypeStep({
               )}
               <Icon
                 className={
-                  "size-6 transition-colors " + (active ? "text-accent" : "text-brand-900/40 group-hover:text-accent/70")
+                  "size-6 transition-colors " +
+                  (active ? "text-accent" : "text-brand-900/40 group-hover:text-accent/70")
                 }
               />
               <span className="text-sm font-medium leading-snug">{label}</span>
@@ -634,10 +689,12 @@ function StyleStep({
                   <Check className="size-2.5 text-brand-950" />
                 </span>
               )}
-              <span className={
-                "font-serif text-lg font-medium italic transition-colors " +
-                (active ? "text-brand-900" : "text-brand-900 group-hover:text-accent")
-              }>
+              <span
+                className={
+                  "font-serif text-lg font-medium italic transition-colors " +
+                  (active ? "text-brand-900" : "text-brand-900 group-hover:text-accent")
+                }
+              >
                 {label}
               </span>
               <span className="text-[11px] text-brand-900/50 leading-relaxed">{desc}</span>
@@ -687,9 +744,7 @@ function MoodStep({
               onClick={() => onSelect(value)}
               className={
                 "group relative p-6 border text-left transition-all duration-200 cursor-pointer " +
-                (active
-                  ? "border-accent shadow-sm"
-                  : "border-brand-900/8 hover:border-accent/50")
+                (active ? "border-accent shadow-sm" : "border-brand-900/8 hover:border-accent/50")
               }
             >
               {active && (
@@ -751,7 +806,9 @@ function InstructionsStep({
           className="size-16 object-cover shrink-0 outline-1 -outline-offset-1 outline-black/5"
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">Design Summary</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
+            Design Summary
+          </p>
           <p className="text-sm font-semibold">{wallpaper.title}</p>
           <p className="text-xs text-brand-900/55">
             {roomType} · {style} · {mood}
@@ -920,7 +977,7 @@ function GeneratingScreen({
 
 // ── Result Gallery ─────────────────────────────────────────────────────────────
 
-const VARIATION_LABELS = ["A", "B", "C", "D"];
+const getVariationLabel = (index: number) => String.fromCharCode(65 + (index % 26));
 
 const downloadImage = async (url: string, filename: string) => {
   try {
@@ -944,10 +1001,9 @@ function ResultGallery({
   roomType,
   style,
   mood,
-  variations,
-  activeVariation,
-  onSelectVariation,
-  activeImageUrl,
+  generatedImages,
+  selectedImageId,
+  onSelectImage,
   onGenerateMore,
   onCreateNew,
   generating,
@@ -956,15 +1012,21 @@ function ResultGallery({
   roomType: string;
   style: string;
   mood: string;
-  variations: string[];
-  activeVariation: number;
-  onSelectVariation: (i: number) => void;
-  activeImageUrl: string;
+  generatedImages: GeneratedImage[];
+  selectedImageId: string | null;
+  onSelectImage: (id: string) => void;
   onGenerateMore: () => void;
   onCreateNew: () => void;
   generating: boolean;
 }) {
   const [shareToast, setShareToast] = useState(false);
+  const activeIndex = Math.max(
+    0,
+    generatedImages.findIndex((image) => image.id === selectedImageId),
+  );
+  const activeImage = generatedImages[activeIndex] || generatedImages[0];
+  const activeImageUrl = activeImage?.url || "";
+  const activeLabel = getVariationLabel(activeIndex);
 
   const handleShare = async () => {
     try {
@@ -1002,9 +1064,13 @@ function ResultGallery({
             className="bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-50"
           >
             {generating ? (
-              <><Loader2 className="size-3.5 animate-spin" /> Generating…</>
+              <>
+                <Loader2 className="size-3.5 animate-spin" /> Generating…
+              </>
             ) : (
-              <><Sparkles className="size-3.5" /> Generate More Like This</>
+              <>
+                <Sparkles className="size-3.5" /> Generate More Like This
+              </>
             )}
           </button>
         </div>
@@ -1017,7 +1083,7 @@ function ResultGallery({
             <img
               key={activeImageUrl}
               src={activeImageUrl}
-              alt={`Variation ${VARIATION_LABELS[activeVariation]}`}
+              alt={`Variation ${activeLabel}`}
               className="w-full max-h-[75vh] object-cover shadow-2xl animate-in fade-in duration-500"
             />
             {/* Wallpaper badge */}
@@ -1026,9 +1092,7 @@ function ResultGallery({
               <div className="min-w-0">
                 <p className="text-[9px] uppercase tracking-[0.2em] text-brand-900/40">Wallpaper</p>
                 <p className="text-sm font-semibold truncate">{wallpaper.title}</p>
-                <p className="text-[9px] text-brand-900/40 mt-0.5">
-                  Variation {VARIATION_LABELS[activeVariation]}
-                </p>
+                <p className="text-[9px] text-brand-900/40 mt-0.5">Variation {activeLabel}</p>
               </div>
             </div>
             {/* AI badge */}
@@ -1046,33 +1110,37 @@ function ResultGallery({
               Generated Variations
             </p>
             <div className="grid grid-cols-4 gap-3">
-              {variations.map((url, i) => (
-                <button
-                  key={i}
-                  id={`variation-${VARIATION_LABELS[i]}`}
-                  onClick={() => onSelectVariation(i)}
-                  className={
-                    "group relative aspect-[4/3] overflow-hidden transition-all cursor-pointer " +
-                    (activeVariation === i
-                      ? "outline outline-2 outline-accent outline-offset-2"
-                      : "hover:outline hover:outline-1 hover:outline-accent/50 hover:outline-offset-1")
-                  }
-                >
-                  <img
-                    src={url}
-                    alt={`Variation ${VARIATION_LABELS[i]}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute bottom-1.5 left-1.5 bg-card/90 backdrop-blur-sm px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] font-bold">
-                    {VARIATION_LABELS[i]}
-                  </div>
-                  {activeVariation === i && (
-                    <div className="absolute top-1.5 right-1.5 size-4 rounded-full bg-accent grid place-items-center">
-                      <Check className="size-2.5 text-brand-950" />
+              {generatedImages.map((image, i) => {
+                const label = getVariationLabel(i);
+                const active = activeImage?.id === image.id;
+                return (
+                  <button
+                    key={image.id}
+                    id={`variation-${label}`}
+                    onClick={() => onSelectImage(image.id)}
+                    className={
+                      "group relative aspect-[4/3] overflow-hidden transition-all cursor-pointer " +
+                      (active
+                        ? "outline outline-2 outline-accent outline-offset-2"
+                        : "hover:outline hover:outline-1 hover:outline-accent/50 hover:outline-offset-1")
+                    }
+                  >
+                    <img
+                      src={image.url}
+                      alt={`Variation ${label}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute bottom-1.5 left-1.5 bg-card/90 backdrop-blur-sm px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] font-bold">
+                      {label}
                     </div>
-                  )}
-                </button>
-              ))}
+                    {active && (
+                      <div className="absolute top-1.5 right-1.5 size-4 rounded-full bg-accent grid place-items-center">
+                        <Check className="size-2.5 text-brand-950" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1081,7 +1149,9 @@ function ResultGallery({
         <div className="lg:sticky lg:top-28 space-y-4">
           {/* Design info */}
           <div className="bg-card border border-brand-900/8 p-5 space-y-3">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">Design Details</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+              Design Details
+            </p>
             <div className="space-y-1.5">
               <DetailRow label="Room" value={roomType} />
               <DetailRow label="Style" value={style} />
@@ -1095,7 +1165,7 @@ function ResultGallery({
             <button
               id="download-png-btn"
               onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${VARIATION_LABELS[activeVariation]}.png`)
+                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.png`)
               }
               className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
             >
@@ -1104,7 +1174,7 @@ function ResultGallery({
             <button
               id="download-jpg-btn"
               onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${VARIATION_LABELS[activeVariation]}.jpg`)
+                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.jpg`)
               }
               className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors"
             >
