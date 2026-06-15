@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SharePanel } from "./share-panel";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect } from "react";
 
 export interface VizPreview {
@@ -82,6 +82,7 @@ export function VisualizationPreviewModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        hideClose
         className="p-0 gap-0 border-0 bg-brand-50 sm:rounded-lg overflow-hidden shadow-2xl"
         style={{ width: "85vw", maxWidth: "85vw", height: "85vh" }}
       >
@@ -90,16 +91,8 @@ export function VisualizationPreviewModal({
           Preview of generated visualization for {active.room}.
         </DialogDescription>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] h-full">
-          <div className="relative bg-brand-100 flex items-center justify-center p-8 lg:p-12 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              aria-label="Close preview"
-              className="absolute top-5 right-5 z-20 size-10 grid place-items-center rounded-full bg-card/90 backdrop-blur hover:bg-card transition-colors"
-            >
-              <X className="size-4" />
-            </button>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] h-full">
+          <div className="relative min-h-0 bg-brand-100 flex items-center justify-center p-8 lg:p-12 overflow-hidden">
             {canNavigate && (
               <>
                 <button
@@ -132,22 +125,22 @@ export function VisualizationPreviewModal({
               <p className="text-sm font-medium">{active.room}</p>
             </div>
           </div>
-          <div className="overflow-y-auto bg-brand-50 p-6 lg:p-8 border-l border-brand-900/8">
-            <div className="bg-card border border-brand-900/8 p-7 lg:p-8 mb-4">
+          <div className="min-h-0 overflow-y-auto bg-brand-50 border-l border-brand-900/8 p-5 lg:p-6 pb-7">
+            <div className="bg-card border border-brand-900/8 p-5 lg:p-6 mb-3">
               <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
                 Details
               </p>
-              <h3 className="font-serif text-3xl italic mt-2 mb-6">
+              <h3 className="font-serif text-2xl italic mt-2 mb-5">
                 {active.wallpaperTitle || "Visualization"}
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <DetailRow label="Room Type" value={active.room || "Room"} />
                 <DetailRow label="Style" value={active.style || "Style"} />
                 <DetailRow label="Mood" value={active.mood || "Mood"} />
                 <DetailRow label="Created" value={createdDate} />
               </div>
             </div>
-            <SharePanel title="Share Visualization" shareUrl={active.image} />
+            <SharePanel title="Share Visualization" shareUrl={active.image} compact />
           </div>
         </div>
       </DialogContent>
