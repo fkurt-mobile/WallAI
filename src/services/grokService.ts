@@ -16,7 +16,7 @@ interface GenerateRoomDesignParams {
   customPrompt?: string;
 }
 
-const XAI_IMAGE_MODEL = process.env.XAI_IMAGE_MODEL || "grok-imagine-image-quality";
+const XAI_IMAGE_MODEL = process.env.XAI_IMAGE_MODEL || "grok-imagine-image";
 
 const toImageRef = (url: string) => ({
   type: "image_url",
