@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
+import { formatRelativeGeneratedTime, formatShortDate } from "@/lib/dates";
 
 // Event tracking utility
 const trackEvent = (eventName: string) => {
@@ -13,30 +14,6 @@ const trackEvent = (eventName: string) => {
     window.dispatchEvent(new CustomEvent(eventName));
   }
 };
-
-// Relative time formatter helper
-function getRelativeTimeString(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) {
-    return "Generated just now";
-  }
-  if (diffMins < 60) {
-    return `Generated ${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
-  }
-  if (diffHours < 24) {
-    return `Generated ${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-  }
-  if (diffDays === 1) {
-    return "Generated yesterday";
-  }
-  return `Generated ${diffDays} days ago`;
-}
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -60,6 +37,43 @@ interface VisualizationDetailData {
   wallpapers?: {
     title?: string | null;
   } | null;
+}
+
+interface AiGenerationMetadataRow {
+  room_type?: string | null;
+  style?: string | null;
+  mood?: string | null;
+  created_at?: string | null;
+  variation_1_url?: string | null;
+  variation_2_url?: string | null;
+  variation_3_url?: string | null;
+  variation_4_url?: string | null;
+}
+
+interface AiGenerationsMetadataClient {
+  from: (table: "ai_generations") => {
+    select: (columns: string) => {
+      eq: (
+        column: string,
+        value: string,
+      ) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => {
+          order: (
+            column: string,
+            options: { ascending: boolean },
+          ) => {
+            limit: (count: number) => Promise<{
+              data: AiGenerationMetadataRow[] | null;
+              error: { message?: string } | null;
+            }>;
+          };
+        };
+      };
+    };
+  };
 }
 
 function Dashboard() {
@@ -146,7 +160,49 @@ function Dashboard() {
         .maybeSingle();
 
       if (error) throw error;
-      return data;
+      if (!data) return null;
+
+      const latest = data as unknown as VisualizationDetailData;
+      if (latest.style && latest.mood) return latest;
+      if (!latest.wallpaper_id) return latest;
+
+      try {
+        const aiGenerationsClient = supabase as unknown as AiGenerationsMetadataClient;
+        const { data: generations, error: generationsError } = await aiGenerationsClient
+          .from("ai_generations")
+          .select(
+            "room_type, style, mood, created_at, variation_1_url, variation_2_url, variation_3_url, variation_4_url",
+          )
+          .eq("user_id", profile.id)
+          .eq("wallpaper_id", latest.wallpaper_id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (!generationsError && generations) {
+          const matchingGeneration = (generations as AiGenerationMetadataRow[]).find((generation) =>
+            [
+              generation.variation_1_url,
+              generation.variation_2_url,
+              generation.variation_3_url,
+              generation.variation_4_url,
+            ].includes(latest.result_image_url),
+          );
+
+          if (matchingGeneration) {
+            return {
+              ...latest,
+              room_type: latest.room_type || matchingGeneration.room_type || null,
+              style: latest.style || matchingGeneration.style || null,
+              mood: latest.mood || matchingGeneration.mood || null,
+              created_at: latest.created_at || matchingGeneration.created_at || "",
+            };
+          }
+        }
+      } catch {
+        // Older projects may not have the ai_generations table.
+      }
+
+      return latest;
     },
     enabled: !!profile?.id,
   });
@@ -171,6 +227,14 @@ function Dashboard() {
   };
 
   const latestViz = latestVisualization as unknown as VisualizationDetailData;
+  const latestVizSearch = latestViz?.wallpaper_id
+    ? {
+        wallpaper: latestViz.wallpaper_id,
+        roomType: latestViz.room_type?.trim() || undefined,
+        style: latestViz.style?.trim() || undefined,
+        mood: latestViz.mood?.trim() || undefined,
+      }
+    : undefined;
 
   return (
     <AppShell>
@@ -241,27 +305,21 @@ function Dashboard() {
               </div>
 
               {/* Middle: Details */}
-              <div className="flex-1 min-w-0 w-full space-y-3">
-                <h3 className="font-serif text-3xl text-brand-900 leading-tight">
+              <div className="flex-1 min-w-0 w-full">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
+                  Details
+                </p>
+                <h3 className="font-serif text-2xl italic text-brand-900 leading-tight mt-2 mb-5">
                   {latestViz.wallpapers?.title || "AI Room Design"}
                 </h3>
-                <p className="text-sm text-brand-900/65 flex flex-wrap items-center gap-1.5 font-medium">
-                  <span>{latestViz.room_type || "Room"}</span>
-                  {(latestViz.style || latestViz.mood) && (
-                    <>
-                      <span className="text-brand-900/30">·</span>
-                      <span>{latestViz.style || "Minimalist"}</span>
-                    </>
-                  )}
-                  {latestViz.mood && (
-                    <>
-                      <span className="text-brand-900/30">·</span>
-                      <span>{latestViz.mood}</span>
-                    </>
-                  )}
-                </p>
-                <p className="text-xs text-accent font-medium mt-1">
-                  {getRelativeTimeString(latestViz.created_at)}
+                <div className="space-y-2.5 max-w-md">
+                  <DetailRow label="Room Type" value={latestViz.room_type || "Room"} />
+                  <DetailRow label="Style" value={latestViz.style || "Style"} />
+                  <DetailRow label="Mood" value={latestViz.mood || "Mood"} />
+                  <DetailRow label="Created" value={formatShortDate(latestViz.created_at)} />
+                </div>
+                <p className="text-xs text-accent font-medium mt-4">
+                  {formatRelativeGeneratedTime(latestViz.created_at)}
                 </p>
               </div>
 
@@ -275,15 +333,10 @@ function Dashboard() {
                 >
                   Open Design
                 </Link>
-                {latestViz.wallpaper_id && (
+                {latestVizSearch && (
                   <Link
                     to="/tools/wallpaper-visualizer"
-                    search={{
-                      wallpaper: latestViz.wallpaper_id,
-                      roomType: latestViz.room_type || undefined,
-                      style: latestViz.style || undefined,
-                      mood: latestViz.mood || undefined,
-                    }}
+                    search={latestVizSearch}
                     onClick={() => trackEvent("dashboard_generate_similar_clicked")}
                     className="w-full border border-brand-900/15 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block shrink-0"
                   >
@@ -344,6 +397,15 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="bg-card p-8">
       <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{label}</p>
       <p className="font-serif text-5xl mt-4">{value}</p>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">{label}</span>
+      <span className="text-sm font-medium text-right">{value}</span>
     </div>
   );
 }

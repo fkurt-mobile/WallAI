@@ -3,6 +3,7 @@ import { AppShell } from "@/components/site/app-shell";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { formatShortDate } from "@/lib/dates";
 
 // Event tracking utility
 const trackEvent = (eventName: string) => {
@@ -55,6 +56,14 @@ function VisualizationDetail() {
   const { visualization } = Route.useLoaderData();
   const viz = visualization;
   const [copied, setCopied] = useState(false);
+  const generateSimilarSearch = viz.wallpaper_id
+    ? {
+        wallpaper: viz.wallpaper_id,
+        roomType: viz.room_type?.trim() || undefined,
+        style: viz.style?.trim() || undefined,
+        mood: viz.mood?.trim() || undefined,
+      }
+    : undefined;
 
   const copyShareLink = async () => {
     try {
@@ -97,12 +106,7 @@ function VisualizationDetail() {
               </p>
             )}
             <p className="text-xs text-brand-900/40 mb-10">
-              Created{" "}
-              {new Date(viz.created_at).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })}
+              Created {formatShortDate(viz.created_at)}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -113,15 +117,10 @@ function VisualizationDetail() {
               >
                 {copied ? "Copied Link!" : "Copy Share Link"}
               </button>
-              {viz.wallpaper_id && (
+              {generateSimilarSearch && (
                 <Link
                   to="/tools/wallpaper-visualizer"
-                  search={{
-                    wallpaper: viz.wallpaper_id,
-                    roomType: viz.room_type || undefined,
-                    style: viz.style || undefined,
-                    mood: viz.mood || undefined,
-                  }}
+                  search={generateSimilarSearch}
                   onClick={() => trackEvent("dashboard_generate_similar_clicked")}
                   className="border border-brand-900/15 px-8 py-4 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block"
                 >

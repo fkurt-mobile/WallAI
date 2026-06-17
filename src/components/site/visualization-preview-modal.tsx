@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { SharePanel } from "./share-panel";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect } from "react";
+import { formatShortDate } from "@/lib/dates";
 
 export interface VizPreview {
   id: string;
@@ -71,13 +72,7 @@ export function VisualizationPreviewModal({
 
   if (!active) return null;
 
-  const createdDate = active.createdAt
-    ? new Date(active.createdAt).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "Unknown";
+  const createdDate = formatShortDate(active.createdAt);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

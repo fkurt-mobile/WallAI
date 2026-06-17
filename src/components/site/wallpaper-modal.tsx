@@ -6,6 +6,7 @@ import { type Wallpaper } from "@/lib/wallpapers/data";
 import { VisualizationPreviewModal, type VizPreview } from "./visualization-preview-modal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { parseDatabaseDate } from "@/lib/dates";
 
 interface Props {
   wallpaper: Wallpaper | null;
@@ -135,7 +136,9 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
       }
 
       return [...mappedVisualizations, ...mappedAiGenerations].sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+        (a, b) =>
+          (parseDatabaseDate(b.createdAt)?.getTime() || 0) -
+          (parseDatabaseDate(a.createdAt)?.getTime() || 0),
       );
     },
     enabled: open && !!wallpaper?.id,
