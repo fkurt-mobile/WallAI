@@ -24,6 +24,7 @@ import { Route as ApiAiApplyWallpaperToUploadedRoomRouteImport } from './routes/
 import { Route as ApiAiApplyWallpaperRouteImport } from './routes/api.ai.apply-wallpaper'
 import { Route as AuthenticatedWallpapersNewRouteImport } from './routes/_authenticated.wallpapers.new'
 import { Route as AuthenticatedWallpapersIdRouteImport } from './routes/_authenticated.wallpapers.$id'
+import { Route as AuthenticatedVisualizationsIdRouteImport } from './routes/_authenticated.visualizations.$id'
 import { Route as AuthenticatedToolsWallpaperVisualizerRouteImport } from './routes/_authenticated.tools.wallpaper-visualizer'
 import { Route as AuthenticatedToolsImageCropRouteImport } from './routes/_authenticated.tools.image-crop'
 
@@ -106,6 +107,12 @@ const AuthenticatedWallpapersIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedWallpapersRoute,
   } as any)
+const AuthenticatedVisualizationsIdRoute =
+  AuthenticatedVisualizationsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedVisualizationsRoute,
+  } as any)
 const AuthenticatedToolsWallpaperVisualizerRoute =
   AuthenticatedToolsWallpaperVisualizerRouteImport.update({
     id: '/wallpaper-visualizer',
@@ -125,10 +132,11 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/tools': typeof AuthenticatedToolsRouteWithChildren
-  '/visualizations': typeof AuthenticatedVisualizationsRoute
+  '/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
   '/wallpapers': typeof AuthenticatedWallpapersRouteWithChildren
   '/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
+  '/visualizations/$id': typeof AuthenticatedVisualizationsIdRoute
   '/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
   '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
@@ -143,9 +151,10 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/tools': typeof AuthenticatedToolsRouteWithChildren
-  '/visualizations': typeof AuthenticatedVisualizationsRoute
+  '/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
   '/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
+  '/visualizations/$id': typeof AuthenticatedVisualizationsIdRoute
   '/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
   '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
@@ -162,10 +171,11 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/tools': typeof AuthenticatedToolsRouteWithChildren
-  '/_authenticated/visualizations': typeof AuthenticatedVisualizationsRoute
+  '/_authenticated/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
   '/_authenticated/wallpapers': typeof AuthenticatedWallpapersRouteWithChildren
   '/_authenticated/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/_authenticated/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
+  '/_authenticated/visualizations/$id': typeof AuthenticatedVisualizationsIdRoute
   '/_authenticated/wallpapers/$id': typeof AuthenticatedWallpapersIdRoute
   '/_authenticated/wallpapers/new': typeof AuthenticatedWallpapersNewRoute
   '/api/ai/apply-wallpaper': typeof ApiAiApplyWallpaperRoute
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/wallpapers'
     | '/tools/image-crop'
     | '/tools/wallpaper-visualizer'
+    | '/visualizations/$id'
     | '/wallpapers/$id'
     | '/wallpapers/new'
     | '/api/ai/apply-wallpaper'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/visualizations'
     | '/tools/image-crop'
     | '/tools/wallpaper-visualizer'
+    | '/visualizations/$id'
     | '/wallpapers/$id'
     | '/wallpapers/new'
     | '/api/ai/apply-wallpaper'
@@ -222,6 +234,7 @@ export interface FileRouteTypes {
     | '/_authenticated/wallpapers'
     | '/_authenticated/tools/image-crop'
     | '/_authenticated/tools/wallpaper-visualizer'
+    | '/_authenticated/visualizations/$id'
     | '/_authenticated/wallpapers/$id'
     | '/_authenticated/wallpapers/new'
     | '/api/ai/apply-wallpaper'
@@ -348,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWallpapersIdRouteImport
       parentRoute: typeof AuthenticatedWallpapersRoute
     }
+    '/_authenticated/visualizations/$id': {
+      id: '/_authenticated/visualizations/$id'
+      path: '/$id'
+      fullPath: '/visualizations/$id'
+      preLoaderRoute: typeof AuthenticatedVisualizationsIdRouteImport
+      parentRoute: typeof AuthenticatedVisualizationsRoute
+    }
     '/_authenticated/tools/wallpaper-visualizer': {
       id: '/_authenticated/tools/wallpaper-visualizer'
       path: '/wallpaper-visualizer'
@@ -379,6 +399,20 @@ const AuthenticatedToolsRouteChildren: AuthenticatedToolsRouteChildren = {
 const AuthenticatedToolsRouteWithChildren =
   AuthenticatedToolsRoute._addFileChildren(AuthenticatedToolsRouteChildren)
 
+interface AuthenticatedVisualizationsRouteChildren {
+  AuthenticatedVisualizationsIdRoute: typeof AuthenticatedVisualizationsIdRoute
+}
+
+const AuthenticatedVisualizationsRouteChildren: AuthenticatedVisualizationsRouteChildren =
+  {
+    AuthenticatedVisualizationsIdRoute: AuthenticatedVisualizationsIdRoute,
+  }
+
+const AuthenticatedVisualizationsRouteWithChildren =
+  AuthenticatedVisualizationsRoute._addFileChildren(
+    AuthenticatedVisualizationsRouteChildren,
+  )
+
 interface AuthenticatedWallpapersRouteChildren {
   AuthenticatedWallpapersIdRoute: typeof AuthenticatedWallpapersIdRoute
   AuthenticatedWallpapersNewRoute: typeof AuthenticatedWallpapersNewRoute
@@ -401,7 +435,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRouteWithChildren
-  AuthenticatedVisualizationsRoute: typeof AuthenticatedVisualizationsRoute
+  AuthenticatedVisualizationsRoute: typeof AuthenticatedVisualizationsRouteWithChildren
   AuthenticatedWallpapersRoute: typeof AuthenticatedWallpapersRouteWithChildren
 }
 
@@ -409,7 +443,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedToolsRoute: AuthenticatedToolsRouteWithChildren,
-  AuthenticatedVisualizationsRoute: AuthenticatedVisualizationsRoute,
+  AuthenticatedVisualizationsRoute:
+    AuthenticatedVisualizationsRouteWithChildren,
   AuthenticatedWallpapersRoute: AuthenticatedWallpapersRouteWithChildren,
 }
 

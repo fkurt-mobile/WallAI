@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +14,30 @@ const trackEvent = (eventName: string) => {
   }
 };
 
+// Relative time formatter helper
+function getRelativeTimeString(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) {
+    return "Generated just now";
+  }
+  if (diffMins < 60) {
+    return `Generated ${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+  }
+  if (diffHours < 24) {
+    return `Generated ${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  }
+  if (diffDays === 1) {
+    return "Generated yesterday";
+  }
+  return `Generated ${diffDays} days ago`;
+}
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
@@ -22,6 +47,20 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   }),
   component: Dashboard,
 });
+
+interface VisualizationDetailData {
+  id: string;
+  user_id: string | null;
+  wallpaper_id: string | null;
+  result_image_url: string;
+  room_type: string | null;
+  style: string | null;
+  mood: string | null;
+  created_at: string;
+  wallpapers?: {
+    title?: string | null;
+  } | null;
+}
 
 function Dashboard() {
   const { data: profile, isLoading: profileLoading } = useProfile();
@@ -91,7 +130,35 @@ function Dashboard() {
     enabled: !!profile?.id,
   });
 
-  const isLoading = profileLoading || wallpapersLoading;
+  // Fetch latest visualization/design for current user
+  const { data: latestVisualization, isLoading: latestVizLoading } = useQuery({
+    queryKey: ["latest-visualization", profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const { data, error } = await supabase
+        .from("visualizations")
+        .select(
+          "id, user_id, wallpaper_id, result_image_url, room_type, style, mood, created_at, wallpapers(title)",
+        )
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.id,
+  });
+
+  const isLoading = profileLoading || wallpapersLoading || latestVizLoading;
+
+  // Track continue working section viewed
+  useEffect(() => {
+    if (latestVisualization) {
+      trackEvent("dashboard_continue_working_viewed");
+    }
+  }, [latestVisualization]);
 
   const handleStartDesign = () => {
     trackEvent("dashboard_start_design_clicked");
@@ -102,6 +169,8 @@ function Dashboard() {
       navigate({ to: "/tools/wallpaper-visualizer" });
     }
   };
+
+  const latestViz = latestVisualization as unknown as VisualizationDetailData;
 
   return (
     <AppShell>
@@ -150,6 +219,81 @@ function Dashboard() {
             value={isLoading ? "..." : String(aiGenerationsCount)}
           />
         </div>
+
+        {/* Continue Working Section */}
+        {!isLoading && latestViz && (
+          <section className="mb-16">
+            <div className="mb-6">
+              <h2 className="font-serif text-3xl italic">Continue Working</h2>
+              <p className="text-xs text-brand-900/50 mt-1">
+                Resume your latest AI-generated room design.
+              </p>
+            </div>
+
+            <div className="bg-card border border-brand-900/8 p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 shadow-sm">
+              {/* Left: Preview image */}
+              <div className="w-full md:w-72 aspect-[4/3] shrink-0 overflow-hidden bg-brand-100 relative group/continue-img">
+                <img
+                  src={latestViz.result_image_url}
+                  alt={latestViz.wallpapers?.title || "Latest design"}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover/continue-img:scale-105 animate-in fade-in"
+                />
+              </div>
+
+              {/* Middle: Details */}
+              <div className="flex-1 min-w-0 w-full space-y-3">
+                <h3 className="font-serif text-3xl text-brand-900 leading-tight">
+                  {latestViz.wallpapers?.title || "AI Room Design"}
+                </h3>
+                <p className="text-sm text-brand-900/65 flex flex-wrap items-center gap-1.5 font-medium">
+                  <span>{latestViz.room_type || "Room"}</span>
+                  {(latestViz.style || latestViz.mood) && (
+                    <>
+                      <span className="text-brand-900/30">·</span>
+                      <span>{latestViz.style || "Minimalist"}</span>
+                    </>
+                  )}
+                  {latestViz.mood && (
+                    <>
+                      <span className="text-brand-900/30">·</span>
+                      <span>{latestViz.mood}</span>
+                    </>
+                  )}
+                </p>
+                <p className="text-xs text-accent font-medium mt-1">
+                  {getRelativeTimeString(latestViz.created_at)}
+                </p>
+              </div>
+
+              {/* Right: CTAs */}
+              <div className="flex flex-col sm:flex-row md:flex-col gap-3 w-full md:w-auto shrink-0 justify-end md:items-stretch">
+                <Link
+                  to="/visualizations/$id"
+                  params={{ id: latestViz.id }}
+                  onClick={() => trackEvent("dashboard_continue_working_opened")}
+                  className="w-full bg-brand-900 text-brand-50 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors text-center font-medium shrink-0"
+                >
+                  Open Design
+                </Link>
+                {latestViz.wallpaper_id && (
+                  <Link
+                    to="/tools/wallpaper-visualizer"
+                    search={{
+                      wallpaper: latestViz.wallpaper_id,
+                      roomType: latestViz.room_type || undefined,
+                      style: latestViz.style || undefined,
+                      mood: latestViz.mood || undefined,
+                    }}
+                    onClick={() => trackEvent("dashboard_generate_similar_clicked")}
+                    className="w-full border border-brand-900/15 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block shrink-0"
+                  >
+                    Generate Similar
+                  </Link>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <div className="flex items-baseline justify-between mb-6">
           <h2 className="font-serif text-3xl italic">Recently Added</h2>

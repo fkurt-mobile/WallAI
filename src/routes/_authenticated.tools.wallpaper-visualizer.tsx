@@ -33,7 +33,14 @@ import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const searchSchema = z.object({ wallpaper: z.string().optional() });
+const searchSchema = z.object({
+  wallpaper: z.string().optional(),
+  wallpaper_id: z.string().optional(),
+  room_type: z.string().optional(),
+  roomType: z.string().optional(),
+  style: z.string().optional(),
+  mood: z.string().optional(),
+});
 
 export const Route = createFileRoute("/_authenticated/tools/wallpaper-visualizer")({
   validateSearch: searchSchema,
@@ -193,16 +200,37 @@ function AiRoomDesigner() {
     [dbWallpapers],
   );
 
-  // ── Load wallpaper from query param ────────────────────────────────────────
+  // ── Load wallpaper from query param and prefill ────────────────────────────
   useEffect(() => {
-    if (search.wallpaper && wallpapersList.length > 0) {
-      const selected = wallpapersList.find((w) => w.id === search.wallpaper);
+    const wpId = search.wallpaper_id || search.wallpaper;
+    const rt = search.room_type || search.roomType;
+    if (wpId && wallpapersList.length > 0) {
+      const selected = wallpapersList.find((w) => w.id === wpId);
       if (selected) {
-        setDesign((d) => ({ ...d, wallpaper: selected }));
-        setStep("room-type");
+        setDesign((d) => ({
+          ...d,
+          wallpaper: selected,
+          roomType: rt || d.roomType,
+          style: search.style || d.style,
+          mood: search.mood || d.mood,
+        }));
+
+        if (rt && search.style && search.mood) {
+          setStep("instructions");
+        } else {
+          setStep("room-type");
+        }
       }
     }
-  }, [search.wallpaper, wallpapersList]);
+  }, [
+    search.wallpaper,
+    search.wallpaper_id,
+    search.room_type,
+    search.roomType,
+    search.style,
+    search.mood,
+    wallpapersList,
+  ]);
 
   // ── Auth helper ────────────────────────────────────────────────────────────
   const getToken = async () => {
