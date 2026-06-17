@@ -303,7 +303,7 @@ function NavGroup({
   const isChildActive = items.some(
     (item) => pathname === item.to || pathname.startsWith(item.to + "/"),
   );
-  const [isOpen, setIsOpen] = useState(isChildActive || !collapsible);
+  const [isOpen, setIsOpen] = useState(isChildActive || !collapsible || label === "Tools");
 
   useEffect(() => {
     if (isChildActive) {

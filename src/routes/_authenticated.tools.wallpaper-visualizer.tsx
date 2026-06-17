@@ -31,6 +31,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const searchSchema = z.object({ wallpaper: z.string().optional() });
 
@@ -437,6 +438,7 @@ function AiRoomDesigner() {
             onGenerateMore={handleGenerate}
             onCreateNew={resetAll}
             generating={generating}
+            variationCount={design.variationCount}
           />
         )}
       </div>
@@ -1073,6 +1075,7 @@ function ResultGallery({
   onGenerateMore,
   onCreateNew,
   generating,
+  variationCount,
 }: {
   wallpaper: Wallpaper;
   roomType: string;
@@ -1084,8 +1087,10 @@ function ResultGallery({
   onGenerateMore: () => void;
   onCreateNew: () => void;
   generating: boolean;
+  variationCount: number;
 }) {
   const [shareToast, setShareToast] = useState(false);
+  const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const activeIndex = Math.max(
     0,
     generatedImages.findIndex((image) => image.id === selectedImageId),
@@ -1133,6 +1138,10 @@ function ResultGallery({
     }
   };
 
+  useEffect(() => {
+    setMainImageLoaded(false);
+  }, [activeImageUrl]);
+
   return (
     <section>
       {/* Header */}
@@ -1175,12 +1184,40 @@ function ResultGallery({
       <div className="grid lg:grid-cols-[1fr_340px] gap-8 items-start">
         {/* Main preview */}
         <div>
-          <div className="relative bg-brand-900/5 overflow-hidden">
+          <div className="relative min-h-[320px] bg-brand-900/5 overflow-hidden">
+            {!mainImageLoaded && (
+              <div className="absolute inset-0 z-10">
+                <div className="absolute inset-0 bg-gradient-to-br from-brand-100 via-card to-brand-100" />
+                <Skeleton className="absolute inset-0 h-full w-full rounded-none opacity-50" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center px-6">
+                  <div className="relative size-14">
+                    <div className="absolute inset-0 rounded-full border border-accent/25" />
+                    <div className="absolute inset-0 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                    <div className="absolute inset-0 grid place-items-center">
+                      <Sparkles className="size-4 text-accent" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
+                      Loading Preview
+                    </p>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      Your generated image is being prepared for display.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <img
               key={activeImageUrl}
               src={activeImageUrl}
               alt={`Variation ${activeLabel}`}
-              className="w-full max-h-[75vh] object-cover shadow-2xl animate-in fade-in duration-500"
+              onLoad={() => setMainImageLoaded(true)}
+              onError={() => setMainImageLoaded(true)}
+              className={
+                "w-full max-h-[75vh] object-cover shadow-2xl animate-in fade-in duration-500 transition-opacity " +
+                (mainImageLoaded ? "opacity-100" : "opacity-0")
+              }
             />
             {/* Wallpaper badge */}
             <div className="absolute bottom-5 left-5 bg-card/95 backdrop-blur-md p-3.5 shadow-xl border border-white/20 flex items-center gap-3 max-w-[260px]">
@@ -1198,6 +1235,28 @@ function ResultGallery({
                 AI Generated
               </span>
             </div>
+            {generating && (
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 bg-brand-950/10 animate-pulse" />
+                <div className="absolute left-5 right-5 top-5 bg-card/95 backdrop-blur-md border border-white/30 shadow-2xl p-4 flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="relative size-12 shrink-0">
+                    <div className="absolute inset-0 rounded-full border border-accent/30" />
+                    <div className="absolute inset-0 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                    <div className="absolute inset-0 grid place-items-center">
+                      <Sparkles className="size-4 text-accent" />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
+                      Generating More
+                    </p>
+                    <p className="text-sm text-brand-900/65 mt-1">
+                      New room variations are being added to this result.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Variation thumbnails */}
@@ -1238,6 +1297,10 @@ function ResultGallery({
                   </button>
                 );
               })}
+              {generating &&
+                Array.from({ length: Math.max(1, Math.min(variationCount, 4)) }).map((_, i) => (
+                  <ResultPlaceholderThumb key={`pending-${i}`} index={i} />
+                ))}
             </div>
           </div>
         </div>
@@ -1256,6 +1319,8 @@ function ResultGallery({
               <DetailRow label="Wallpaper" value={wallpaper.title} />
             </div>
           </div>
+
+          {generating && <ResultGenerationStatus variationCount={variationCount} />}
 
           {/* Download buttons */}
           <div className="grid grid-cols-2 gap-2">
@@ -1331,6 +1396,49 @@ function ResultGallery({
         </div>
       </div>
     </section>
+  );
+}
+
+function ResultPlaceholderThumb({ index }: { index: number }) {
+  return (
+    <div
+      className="relative aspect-[4/3] overflow-hidden border border-dashed border-accent/45 bg-card"
+      aria-label={`Pending generated variation ${index + 1}`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-100 via-card to-brand-100 animate-pulse" />
+      <div className="absolute inset-x-0 top-0 h-full bg-gradient-to-r from-transparent via-white/55 to-transparent animate-pulse" />
+      <div className="absolute inset-0 grid place-items-center">
+        <Loader2 className="size-5 animate-spin text-accent" />
+      </div>
+      <div className="absolute bottom-1.5 left-1.5 bg-card/90 backdrop-blur-sm px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] font-bold text-brand-900/45">
+        Next
+      </div>
+    </div>
+  );
+}
+
+function ResultGenerationStatus({ variationCount }: { variationCount: number }) {
+  return (
+    <div className="overflow-hidden border border-accent/30 bg-accent/5 p-5 animate-in fade-in slide-in-from-right-2 duration-300">
+      <div className="flex items-center gap-3">
+        <div className="size-9 rounded-full bg-card grid place-items-center shadow-sm">
+          <Loader2 className="size-4 animate-spin text-accent" />
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-accent font-medium">
+            Rendering
+          </p>
+          <p className="text-sm text-brand-900/65">
+            Preparing {variationCount} new variation{variationCount === 1 ? "" : "s"}.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <span className="h-1 bg-accent animate-pulse" />
+        <span className="h-1 bg-accent/60 animate-pulse [animation-delay:160ms]" />
+        <span className="h-1 bg-accent/30 animate-pulse [animation-delay:320ms]" />
+      </div>
+    </div>
   );
 }
 

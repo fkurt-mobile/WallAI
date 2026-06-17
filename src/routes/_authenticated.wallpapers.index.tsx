@@ -8,6 +8,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/wallpapers/")({
   head: () => ({
@@ -24,6 +30,8 @@ function WallpaperList() {
   const [cat, setCat] = useState("All");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Wallpaper | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Wallpaper | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { data: profile, isLoading: profileLoading } = useProfile();
   const companyId = profile?.company_id;
@@ -54,24 +62,35 @@ function WallpaperList() {
     tint: "",
   }));
 
-  const handleDelete = async (id: string, imageUrl: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this wallpaper? This will also remove any related visualizations.",
-      )
-    ) {
-      return;
-    }
+  const requestDelete = (id: string, imageUrl: string) => {
+    const wallpaper = wallpapersList.find((w) => w.id === id) || null;
+    setDeleteTarget(
+      wallpaper || {
+        id,
+        image: imageUrl,
+        title: "this wallpaper",
+        code: "",
+        category: "",
+        tint: "",
+      },
+    );
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
     try {
       // 1. Delete database record (cascades or set null on visualizations depending on schema, we set null or cascade)
-      const { error: dbError } = await supabase.from("wallpapers").delete().eq("id", id);
+      const { error: dbError } = await supabase
+        .from("wallpapers")
+        .delete()
+        .eq("id", deleteTarget.id);
 
       if (dbError) throw dbError;
 
       // 2. Delete storage file if it exists in Supabase Storage
-      if (imageUrl.includes("/wallpaper-images/")) {
-        const path = imageUrl.split("/wallpaper-images/")[1];
+      if (deleteTarget.image.includes("/wallpaper-images/")) {
+        const path = deleteTarget.image.split("/wallpaper-images/")[1];
         if (path) {
           await supabase.storage.from("wallpaper-images").remove([path]);
         }
@@ -81,8 +100,12 @@ function WallpaperList() {
       queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
-    } catch (err: any) {
-      toast.error("Failed to delete wallpaper: " + err.message);
+      setDeleteTarget(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to delete wallpaper: " + message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -182,7 +205,7 @@ function WallpaperList() {
                   <CardAction label="Edit" to="/wallpapers/new" search={{ id: w.id }}>
                     <Pencil className="size-3.5" />
                   </CardAction>
-                  <CardAction label="Delete" onClick={() => handleDelete(w.id, w.image)} danger>
+                  <CardAction label="Delete" onClick={() => requestDelete(w.id, w.image)} danger>
                     <Trash2 className="size-3.5" />
                   </CardAction>
                 </div>
@@ -195,9 +218,74 @@ function WallpaperList() {
         wallpaper={active}
         open={!!active}
         onOpenChange={(o) => !o && setActive(null)}
-        onDelete={handleDelete}
+        onDelete={requestDelete}
+      />
+      <DeleteWallpaperDialog
+        wallpaper={deleteTarget}
+        open={!!deleteTarget}
+        loading={deleteLoading}
+        onCancel={() => !deleteLoading && setDeleteTarget(null)}
+        onConfirm={confirmDelete}
       />
     </AppShell>
+  );
+}
+
+function DeleteWallpaperDialog({
+  wallpaper,
+  open,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  wallpaper: Wallpaper | null;
+  open: boolean;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
+      <AlertDialogContent className="max-w-md border-0 bg-card p-0 shadow-2xl sm:rounded-lg overflow-hidden">
+        <div className="p-7">
+          <div className="mb-5 flex items-start gap-4">
+            <div className="size-11 shrink-0 rounded-full bg-destructive/8 text-destructive grid place-items-center">
+              <Trash2 className="size-5" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium mb-2">
+                Delete Wallpaper
+              </p>
+              <AlertDialogTitle className="font-serif text-3xl italic font-normal leading-tight">
+                Remove {wallpaper?.title || "this wallpaper"}?
+              </AlertDialogTitle>
+            </div>
+          </div>
+          <AlertDialogDescription className="text-sm leading-6 text-brand-900/60">
+            This will delete the wallpaper from your catalog and remove any related visualizations.
+            This action cannot be undone.
+          </AlertDialogDescription>
+        </div>
+        <div className="border-t border-brand-900/8 bg-brand-50/70 px-7 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="border border-brand-900/12 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="bg-destructive text-destructive-foreground px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -213,7 +301,7 @@ function CardAction({
   label: string;
   onClick?: () => void;
   to?: string;
-  search?: Record<string, any>;
+  search?: { id: string };
   danger?: boolean;
 }) {
   const cls =

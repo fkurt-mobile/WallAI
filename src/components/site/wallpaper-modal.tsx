@@ -178,12 +178,7 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
 
         <div className="grid grid-cols-1 lg:grid-cols-[65fr_35fr] h-full">
           {/* LEFT — preview */}
-          <div
-            className={
-              "relative bg-brand-100 flex items-center justify-center group overflow-hidden " +
-              (zoomed ? "p-0" : "p-8 lg:p-12")
-            }
-          >
+          <div className={"relative bg-brand-100 group overflow-hidden " + (zoomed ? "p-0" : "")}>
             <button
               onClick={() => setZoomed((z) => !z)}
               className="absolute top-6 right-6 z-10 size-10 grid place-items-center rounded-full bg-card/90 backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity hover:bg-card cursor-pointer"
@@ -191,17 +186,23 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
             >
               <ZoomIn className="size-4 text-brand-900" />
             </button>
-            <img
-              src={wallpaper.image}
-              alt={wallpaper.title}
-              className={
-                "transition-all duration-500 " +
-                (zoomed
-                  ? "h-full w-full object-cover rounded-none shadow-none cursor-zoom-out"
-                  : "max-w-full max-h-full object-contain rounded-md shadow-xl cursor-zoom-in")
-              }
-              onClick={() => setZoomed((z) => !z)}
-            />
+            {zoomed ? (
+              <img
+                src={wallpaper.image}
+                alt={wallpaper.title}
+                className="h-full w-full object-cover rounded-none shadow-none cursor-zoom-out transition-all duration-500"
+                onClick={() => setZoomed((z) => !z)}
+              />
+            ) : (
+              <div className="absolute inset-8 lg:inset-12 flex items-center justify-center">
+                <img
+                  src={wallpaper.image}
+                  alt={wallpaper.title}
+                  className="block h-full w-full object-contain rounded-md shadow-xl cursor-zoom-in transition-all duration-500"
+                  onClick={() => setZoomed((z) => !z)}
+                />
+              </div>
+            )}
           </div>
 
           {/* RIGHT — info */}

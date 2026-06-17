@@ -91,7 +91,7 @@ export function VisualizationPreviewModal({
         </DialogDescription>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] h-full">
-          <div className="relative min-h-0 bg-brand-100 flex items-center justify-center p-8 lg:p-12 overflow-hidden">
+          <div className="relative min-h-0 bg-brand-100 overflow-hidden">
             {canNavigate && (
               <>
                 <button
@@ -112,11 +112,13 @@ export function VisualizationPreviewModal({
                 </button>
               </>
             )}
-            <img
-              src={active.image}
-              alt={active.room}
-              className="max-w-full max-h-full object-contain rounded-md shadow-xl"
-            />
+            <div className="absolute inset-8 lg:inset-12 flex items-center justify-center">
+              <img
+                src={active.image}
+                alt={active.room}
+                className="block h-full w-full object-contain rounded-md shadow-xl"
+              />
+            </div>
             <div className="absolute top-6 left-6 bg-card/95 backdrop-blur px-4 py-2 border border-white/30">
               <p className="text-[9px] uppercase tracking-[0.22em] text-brand-900/45">
                 {items.length ? `${selectedIndex + 1} of ${items.length}` : "Preview"}

@@ -8,6 +8,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
+import { Check, Facebook, Instagram, Link as LinkIcon, Mail, MessageCircle } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/visualizations")({
   head: () => ({
@@ -69,8 +70,20 @@ type VisualizationCard = VizPreview & {
 
 function VisualizationsPage() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [shareOpenId, setShareOpenId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const { data: profile } = useProfile();
   const companyId = profile?.company_id;
+
+  const copyShareLink = async (viz: VisualizationCard) => {
+    try {
+      await navigator.clipboard.writeText(viz.image);
+      setCopiedId(viz.id);
+      window.setTimeout(() => setCopiedId(null), 1600);
+    } catch {
+      window.open(viz.image, "_blank");
+    }
+  };
 
   // Query real visualizations from Supabase
   const { data: list = [], isLoading } = useQuery({
@@ -194,7 +207,7 @@ function VisualizationsPage() {
             {list.map((v, index) => (
               <article
                 key={v.id}
-                className="bg-card border border-brand-900/8 overflow-hidden flex flex-col"
+                className="relative bg-card border border-brand-900/8 flex flex-col"
               >
                 <button
                   type="button"
@@ -215,19 +228,31 @@ function VisualizationsPage() {
                   </p>
                   <h3 className="font-serif text-2xl italic mt-2">{v.wallpaperTitle}</h3>
                   <p className="text-xs text-brand-900/50 mt-1">Created {v.date}</p>
-                  <div className="mt-5 flex gap-2">
+                  <div className="mt-5 flex gap-2 relative">
                     <button
-                      onClick={() => setActiveIndex(index)}
+                      onClick={() => {
+                        setShareOpenId(null);
+                        setActiveIndex(index);
+                      }}
                       className="flex-1 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
                     >
                       View →
                     </button>
                     <button
-                      onClick={() => setActiveIndex(index)}
+                      onClick={() => setShareOpenId((current) => (current === v.id ? null : v.id))}
+                      aria-expanded={shareOpenId === v.id}
                       className="border border-brand-900/12 px-4 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-50 transition-colors cursor-pointer"
                     >
                       Share
                     </button>
+                    {shareOpenId === v.id && (
+                      <VisualizationSharePopover
+                        viz={v}
+                        copied={copiedId === v.id}
+                        onCopy={() => copyShareLink(v)}
+                        onClose={() => setShareOpenId(null)}
+                      />
+                    )}
                   </div>
                 </div>
               </article>
@@ -244,5 +269,89 @@ function VisualizationsPage() {
         onOpenChange={(o) => !o && setActiveIndex(null)}
       />
     </AppShell>
+  );
+}
+
+function PinterestIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M12 0C5.4 0 0 5.4 0 12c0 5 3.1 9.3 7.5 11-.1-.9-.2-2.4 0-3.4.2-.9 1.4-5.7 1.4-5.7s-.4-.7-.4-1.8c0-1.7 1-3 2.2-3 1 0 1.5.8 1.5 1.7 0 1-.7 2.6-1 4-.3 1.2.6 2.2 1.8 2.2 2.2 0 3.8-2.3 3.8-5.6 0-2.9-2.1-5-5.1-5-3.5 0-5.5 2.6-5.5 5.3 0 1 .4 2.2.9 2.8.1.1.1.2.1.3-.1.4-.3 1.2-.3 1.4-.1.2-.2.3-.4.2-1.5-.7-2.4-2.9-2.4-4.7 0-3.8 2.8-7.4 8-7.4 4.2 0 7.4 3 7.4 7 0 4.2-2.6 7.5-6.3 7.5-1.2 0-2.4-.6-2.8-1.4l-.8 2.9c-.3 1-1 2.3-1.5 3.1.4.1.9.2 1.4.2 6.6 0 12-5.4 12-12S18.6 0 12 0Z" />
+    </svg>
+  );
+}
+
+function VisualizationSharePopover({
+  viz,
+  copied,
+  onCopy,
+  onClose,
+}: {
+  viz: VisualizationCard;
+  copied: boolean;
+  onCopy: () => void;
+  onClose: () => void;
+}) {
+  const options = [
+    {
+      name: "Email",
+      icon: Mail,
+      href: `mailto:?subject=${encodeURIComponent("Wallpaper visualization")}&body=${encodeURIComponent(viz.image)}`,
+    },
+    {
+      name: "WhatsApp",
+      icon: MessageCircle,
+      href: `https://wa.me/?text=${encodeURIComponent(viz.image)}`,
+    },
+    {
+      name: "Facebook",
+      icon: Facebook,
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(viz.image)}`,
+    },
+    {
+      name: "Instagram",
+      icon: Instagram,
+      href: "https://www.instagram.com/",
+    },
+    {
+      name: "Pinterest",
+      icon: PinterestIcon,
+      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(viz.image)}`,
+    },
+  ];
+
+  return (
+    <div className="absolute right-0 top-full z-30 mt-2 w-52 border border-brand-900/10 bg-card p-2 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+      <p className="px-3 py-2 text-[9px] uppercase tracking-[0.2em] text-accent">Share</p>
+      <div className="space-y-1">
+        {options.map((option) => {
+          const Icon = option.icon;
+          return (
+            <a
+              key={option.name}
+              href={option.href}
+              target="_blank"
+              rel="noreferrer"
+              onClick={onClose}
+              className="flex items-center gap-3 px-3 py-2.5 text-xs uppercase tracking-[0.16em] text-brand-900/65 hover:bg-brand-50 hover:text-brand-900 transition-colors"
+            >
+              <Icon className="size-4 text-brand-900/50" />
+              {option.name}
+            </a>
+          );
+        })}
+        <button
+          type="button"
+          onClick={onCopy}
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-xs uppercase tracking-[0.16em] text-brand-900/65 hover:bg-brand-50 hover:text-brand-900 transition-colors cursor-pointer"
+        >
+          {copied ? (
+            <Check className="size-4 text-accent" />
+          ) : (
+            <LinkIcon className="size-4 text-brand-900/50" />
+          )}
+          {copied ? "Copied" : "Copy Link"}
+        </button>
+      </div>
+    </div>
   );
 }
