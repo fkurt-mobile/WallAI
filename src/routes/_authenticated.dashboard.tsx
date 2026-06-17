@@ -1,8 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
+import { toast } from "sonner";
+
+// Event tracking utility
+const trackEvent = (eventName: string) => {
+  console.log(`[Analytics] Event tracked: ${eventName}`);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(eventName));
+  }
+};
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -17,6 +26,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const companyId = profile?.company_id;
+  const navigate = useNavigate();
 
   // Fetch wallpapers count
   const { data: wallpapersCount = 0 } = useQuery({
@@ -54,6 +64,7 @@ function Dashboard() {
     queryFn: async () => {
       if (!profile?.id) return 0;
       const { count, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from("ai_generations" as any)
         .select("*", { count: "exact", head: true })
         .eq("user_id", profile.id);
@@ -82,30 +93,48 @@ function Dashboard() {
 
   const isLoading = profileLoading || wallpapersLoading;
 
+  const handleStartDesign = () => {
+    trackEvent("dashboard_start_design_clicked");
+    if (wallpapersCount === 0) {
+      toast.error("Upload a wallpaper first to start generating designs.");
+      navigate({ to: "/wallpapers/new" });
+    } else {
+      navigate({ to: "/tools/wallpaper-visualizer" });
+    }
+  };
+
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-14">
+          <div className="max-w-3xl">
             <span className="text-[11px] uppercase tracking-[0.2em] text-accent font-medium">
               {isLoading
-                ? "Loading..."
-                : `Welcome back, ${profile?.full_name || profile?.email || "User"}`}
+                ? "LOADING..."
+                : `WELCOME BACK, ${(profile?.full_name || profile?.email || "User").toUpperCase()}`}
             </span>
-            <h1 className="font-serif text-5xl md:text-6xl mt-3">Your studio.</h1>
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl mt-3 leading-tight text-brand-900">
+              Design rooms around your wallpapers with AI.
+            </h1>
+            <p className="mt-4 text-brand-900/65 text-sm md:text-base max-w-2xl leading-relaxed">
+              Upload wallpaper collections, generate styled interiors, and create client-ready
+              visualizations in minutes.
+            </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto shrink-0 md:justify-end">
+            <button
+              type="button"
+              onClick={handleStartDesign}
+              className="w-full md:w-auto bg-brand-900 text-brand-50 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer text-center font-medium shrink-0"
+            >
+              Start New Design
+            </button>
             <Link
               to="/wallpapers/new"
-              className="border border-brand-900/15 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors"
+              onClick={() => trackEvent("dashboard_add_wallpaper_clicked")}
+              className="w-full md:w-auto border border-brand-900/15 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block shrink-0"
             >
               Add Wallpaper
-            </Link>
-            <Link
-              to="/tools/wallpaper-visualizer"
-              className="bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
-            >
-              ✨ AI Room Designer
             </Link>
           </div>
         </div>
@@ -116,7 +145,10 @@ function Dashboard() {
             label="Visualizations this month"
             value={isLoading ? "..." : String(visualizationsCount)}
           />
-          <Stat label="AI designs generated" value={isLoading ? "..." : String(aiGenerationsCount)} />
+          <Stat
+            label="AI designs generated"
+            value={isLoading ? "..." : String(aiGenerationsCount)}
+          />
         </div>
 
         <div className="flex items-baseline justify-between mb-6">
