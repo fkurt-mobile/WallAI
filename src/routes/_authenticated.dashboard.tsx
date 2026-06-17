@@ -6,6 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { formatRelativeGeneratedTime, formatShortDate } from "@/lib/dates";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { CircleHelp } from "lucide-react";
 
 // Event tracking utility
 const trackEvent = (eventName: string) => {
@@ -76,55 +84,56 @@ interface AiGenerationsMetadataClient {
   };
 }
 
+interface DashboardMetrics {
+  totalWallpapers: number;
+  newWallpapersMonth: number;
+  totalVisualizations: number;
+  sharedVisualizations: number;
+  totalAiGenerations: number;
+  todayAiGenerations: number;
+  successRate: number | null;
+  mostUsedWallpaper: string | null;
+  mostUsedWallpaperCount: number;
+}
+
 function Dashboard() {
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const companyId = profile?.company_id;
   const navigate = useNavigate();
 
-  // Fetch wallpapers count
-  const { data: wallpapersCount = 0 } = useQuery({
-    queryKey: ["wallpapers-count", profile?.id],
+  const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useQuery({
+    queryKey: ["dashboard-metrics", profile?.id],
     queryFn: async () => {
-      if (!profile?.id) return 0;
-      const { count, error } = await supabase
-        .from("wallpapers")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.id);
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled: !!profile?.id,
-  });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-  // Fetch visualizations count
-  const { data: visualizationsCount = 0 } = useQuery({
-    queryKey: ["visualizations-count", profile?.id],
-    queryFn: async () => {
-      if (!profile?.id) return 0;
-      const { count, error } = await supabase
-        .from("visualizations")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.id);
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled: !!profile?.id,
-  });
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("No active session. Please log in.");
+      }
 
-  // Fetch AI generations count
-  const { data: aiGenerationsCount = 0 } = useQuery({
-    queryKey: ["ai-generations-count", profile?.id],
-    queryFn: async () => {
-      if (!profile?.id) return 0;
-      const { count, error } = await supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from("ai_generations" as any)
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.id);
-      if (error) return 0;
-      return count || 0;
+      const response = await fetch("/api/dashboard-metrics", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        let message = "Unable to load dashboard metrics.";
+        try {
+          const errorData = await response.json();
+          if (errorData.error) message = errorData.error;
+        } catch {
+          // Keep the fallback message when the response is not JSON.
+        }
+        throw new Error(message);
+      }
+
+      return (await response.json()) as DashboardMetrics;
     },
     enabled: !!profile?.id,
+    retry: false,
   });
 
   // Fetch recently added wallpapers
@@ -208,6 +217,7 @@ function Dashboard() {
   });
 
   const isLoading = profileLoading || wallpapersLoading || latestVizLoading;
+  const showSuccessRateCard = metrics?.successRate !== null;
 
   // Track continue working section viewed
   useEffect(() => {
@@ -216,9 +226,21 @@ function Dashboard() {
     }
   }, [latestVisualization]);
 
+  useEffect(() => {
+    if (metrics) {
+      trackEvent("dashboard_metrics_loaded");
+    }
+  }, [metrics]);
+
+  useEffect(() => {
+    if (metricsError) {
+      trackEvent("dashboard_metrics_failed");
+    }
+  }, [metricsError]);
+
   const handleStartDesign = () => {
     trackEvent("dashboard_start_design_clicked");
-    if (wallpapersCount === 0) {
+    if ((metrics?.totalWallpapers || 0) === 0) {
       toast.error("Upload a wallpaper first to start generating designs.");
       navigate({ to: "/wallpapers/new" });
     } else {
@@ -272,17 +294,89 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-px bg-brand-900/5 mb-16">
-          <Stat label="Wallpapers in catalog" value={isLoading ? "..." : String(wallpapersCount)} />
-          <Stat
-            label="Visualizations this month"
-            value={isLoading ? "..." : String(visualizationsCount)}
-          />
-          <Stat
-            label="AI designs generated"
-            value={isLoading ? "..." : String(aiGenerationsCount)}
-          />
-        </div>
+        <TooltipProvider delayDuration={150}>
+          <div
+            className={`grid gap-px bg-brand-900/5 mb-16 ${
+              showSuccessRateCard ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"
+            }`}
+          >
+            {metricsLoading ? (
+              <>
+                <StatSkeleton />
+                <StatSkeleton />
+                <StatSkeleton />
+                {showSuccessRateCard !== false && <StatSkeleton />}
+              </>
+            ) : metrics ? (
+              <>
+                <StatCard
+                  label="Wallpapers"
+                  tooltip="Total uploaded wallpapers."
+                  value={String(metrics.totalWallpapers)}
+                  insight={
+                    metrics.totalWallpapers === 0
+                      ? "Upload your first wallpaper"
+                      : `+${metrics.newWallpapersMonth} this month`
+                  }
+                  note={
+                    metrics.mostUsedWallpaper && metrics.mostUsedWallpaperCount > 0
+                      ? `Most used: ${metrics.mostUsedWallpaper} · ${metrics.mostUsedWallpaperCount} visualization${metrics.mostUsedWallpaperCount === 1 ? "" : "s"}`
+                      : undefined
+                  }
+                />
+                <StatCard
+                  label="Visualizations"
+                  tooltip="Generated room previews."
+                  value={String(metrics.totalVisualizations)}
+                  insight={
+                    metrics.totalVisualizations === 0
+                      ? "Generate your first room"
+                      : `${metrics.sharedVisualizations} shared`
+                  }
+                />
+                <StatCard
+                  label="AI Designs"
+                  tooltip="Total AI generation jobs."
+                  value={String(metrics.totalAiGenerations)}
+                  insight={
+                    metrics.totalAiGenerations === 0
+                      ? "Start creating"
+                      : `${metrics.todayAiGenerations} today`
+                  }
+                />
+                {showSuccessRateCard && (
+                  <StatCard
+                    label="Success Rate"
+                    tooltip="Completed generations divided by total requests."
+                    value={`${metrics.successRate}%`}
+                    insight="Generation success"
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <StatCard
+                  label="Wallpapers"
+                  tooltip="Total uploaded wallpapers."
+                  value="0"
+                  insight="Upload your first wallpaper"
+                />
+                <StatCard
+                  label="Visualizations"
+                  tooltip="Generated room previews."
+                  value="0"
+                  insight="Generate your first room"
+                />
+                <StatCard
+                  label="AI Designs"
+                  tooltip="Total AI generation jobs."
+                  value="0"
+                  insight="Start creating"
+                />
+              </>
+            )}
+          </div>
+        </TooltipProvider>
 
         {/* Continue Working Section */}
         {!isLoading && latestViz && (
@@ -392,11 +486,52 @@ function Dashboard() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  tooltip,
+  value,
+  insight,
+  note,
+}: {
+  label: string;
+  tooltip: string;
+  value: string;
+  insight: string;
+  note?: string;
+}) {
   return (
     <div className="bg-card p-8">
-      <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{label}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{label}</p>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="text-brand-900/30 transition-colors hover:text-brand-900/55"
+              aria-label={`${label} info`}
+            >
+              <CircleHelp className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-48 bg-brand-900 text-brand-50">
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </div>
       <p className="font-serif text-5xl mt-4">{value}</p>
+      <p className="mt-3 text-sm text-brand-900/65">{insight}</p>
+      {note ? <p className="mt-2 text-[11px] text-brand-900/45">{note}</p> : null}
+    </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <div className="bg-card p-8">
+      <Skeleton className="h-3 w-20 bg-brand-900/8" />
+      <Skeleton className="mt-4 h-12 w-16 bg-brand-900/10" />
+      <Skeleton className="mt-3 h-4 w-28 bg-brand-900/8" />
+      <Skeleton className="mt-2 h-3 w-36 bg-brand-900/6" />
     </div>
   );
 }
