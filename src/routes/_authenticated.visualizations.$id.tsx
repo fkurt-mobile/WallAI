@@ -21,6 +21,7 @@ interface VisualizationDetailData {
   room_type: string | null;
   style: string | null;
   mood: string | null;
+  custom_prompt: string | null;
   created_at: string;
   wallpapers?: {
     title?: string | null;
@@ -62,6 +63,7 @@ function VisualizationDetail() {
         roomType: viz.room_type?.trim() || undefined,
         style: viz.style?.trim() || undefined,
         mood: viz.mood?.trim() || undefined,
+        customPrompt: viz.custom_prompt?.trim() || undefined,
       }
     : undefined;
 

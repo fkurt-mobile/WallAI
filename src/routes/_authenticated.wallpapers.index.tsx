@@ -100,6 +100,7 @@ function WallpaperList() {
       queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       setDeleteTarget(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";

@@ -40,6 +40,8 @@ const searchSchema = z.object({
   roomType: z.string().optional(),
   style: z.string().optional(),
   mood: z.string().optional(),
+  custom_prompt: z.string().optional(),
+  customPrompt: z.string().optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/tools/wallpaper-visualizer")({
@@ -213,6 +215,7 @@ function AiRoomDesigner() {
           roomType: rt || d.roomType,
           style: search.style || d.style,
           mood: search.mood || d.mood,
+          customPrompt: search.custom_prompt || search.customPrompt || d.customPrompt,
         }));
 
         if (rt && search.style && search.mood) {
@@ -229,6 +232,8 @@ function AiRoomDesigner() {
     search.roomType,
     search.style,
     search.mood,
+    search.custom_prompt,
+    search.customPrompt,
     wallpapersList,
   ]);
 

@@ -16,6 +16,38 @@ interface DashboardMetrics {
   successRate: number | null;
   mostUsedWallpaper: string | null;
   mostUsedWallpaperCount: number;
+  recentWallpapers: Array<{
+    id: string;
+    title: string;
+    product_code: string | null;
+    image_url: string;
+    created_at: string;
+  }>;
+  recentDesigns: Array<{
+    id: string;
+    user_id: string | null;
+    wallpaper_id: string | null;
+    result_image_url: string;
+    room_type: string | null;
+    style: string | null;
+    mood: string | null;
+    custom_prompt: string | null;
+    created_at: string;
+    wallpapers?: { title?: string | null } | { title?: string | null }[] | null;
+  }>;
+}
+
+interface RecentDesignRow {
+  id: string;
+  user_id: string | null;
+  wallpaper_id: string | null;
+  result_image_url: string;
+  room_type: string | null;
+  style: string | null;
+  mood: string | null;
+  custom_prompt?: string | null;
+  created_at: string;
+  wallpapers?: { title?: string | null } | { title?: string | null }[] | null;
 }
 
 interface VisualizationShareClient {
@@ -152,49 +184,89 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             return json({ error: "Unauthorized: Invalid token" }, 401);
           }
 
-          const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("company_id")
-            .eq("id", user.id)
-            .single();
-
-          if (profileError || !profile?.company_id) {
-            return json({ error: "Profile or company not found" }, 404);
-          }
-
-          const companyId = profile.company_id;
           const monthStartIso = getMonthStartIso();
           const todayStartIso = getTodayStartIso();
+
+          const fetchRecentDesigns = async (): Promise<{
+            data: RecentDesignRow[] | null;
+            error: { message?: string } | null;
+          }> => {
+            const withCustomPrompt = await supabase
+              .from("visualizations")
+              .select(
+                "id, user_id, wallpaper_id, result_image_url, room_type, style, mood, custom_prompt, created_at, wallpapers(title)",
+              )
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: false })
+              .limit(6);
+
+            if (!withCustomPrompt.error) {
+              return withCustomPrompt as {
+                data: RecentDesignRow[] | null;
+                error: { message?: string } | null;
+              };
+            }
+
+            if (!withCustomPrompt.error.message?.includes("custom_prompt")) {
+              return withCustomPrompt as {
+                data: RecentDesignRow[] | null;
+                error: { message?: string } | null;
+              };
+            }
+
+            return (await supabase
+              .from("visualizations")
+              .select(
+                "id, user_id, wallpaper_id, result_image_url, room_type, style, mood, created_at, wallpapers(title)",
+              )
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: false })
+              .limit(6)) as {
+              data: RecentDesignRow[] | null;
+              error: { message?: string } | null;
+            };
+          };
 
           const [
             wallpapersTotalResult,
             wallpapersMonthResult,
             visualizationsTotalResult,
             mostUsedWallpaperResult,
+            recentWallpapersResult,
+            recentDesignsResult,
           ] = await Promise.all([
             supabase
               .from("wallpapers")
               .select("*", { count: "exact", head: true })
-              .eq("company_id", companyId),
+              .eq("user_id", user.id),
             supabase
               .from("wallpapers")
               .select("*", { count: "exact", head: true })
-              .eq("company_id", companyId)
+              .eq("user_id", user.id)
               .gte("created_at", monthStartIso),
             supabase
               .from("visualizations")
               .select("*", { count: "exact", head: true })
-              .eq("company_id", companyId),
+              .eq("user_id", user.id),
             (supabase as unknown as VisualizationShareClient)
               .from("visualizations")
               .select("wallpaper_id, wallpapers(title)")
-              .eq("company_id", companyId),
+              .eq("user_id", user.id),
+            supabase
+              .from("wallpapers")
+              .select("id, title, product_code, image_url, created_at")
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: false })
+              .limit(6),
+            fetchRecentDesigns(),
           ]);
 
           if (wallpapersTotalResult.error) throw wallpapersTotalResult.error;
           if (wallpapersMonthResult.error) throw wallpapersMonthResult.error;
           if (visualizationsTotalResult.error) throw visualizationsTotalResult.error;
           if (mostUsedWallpaperResult.error) throw mostUsedWallpaperResult.error;
+          if (recentWallpapersResult.error) throw recentWallpapersResult.error;
+          if (recentDesignsResult.error) throw recentDesignsResult.error;
 
           let sharedVisualizations = 0;
           try {
@@ -202,7 +274,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             const { count, error } = await shareClient
               .from("visualizations")
               .select("*", { count: "exact", head: true })
-              .eq("company_id", companyId)
+              .eq("user_id", user.id)
               .or("share_link_created.eq.true,share_count.gt.0");
 
             if (!error) {
@@ -224,13 +296,13 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
               aiMetricsClient
                 .from("ai_generations")
                 .select("*", { count: "exact", head: true })
-                .eq("company_id", companyId),
+                .eq("user_id", user.id),
               aiMetricsClient
                 .from("ai_generations")
                 .select("*", { count: "exact", head: true })
-                .eq("company_id", companyId)
+                .eq("user_id", user.id)
                 .gte?.("created_at", todayStartIso),
-              aiStatusClient.from("ai_generations").select("status").eq("company_id", companyId),
+              aiStatusClient.from("ai_generations").select("status").eq("user_id", user.id),
             ]);
 
             if (!aiTotalResult.error) {
@@ -287,6 +359,14 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             successRate,
             mostUsedWallpaper,
             mostUsedWallpaperCount,
+            recentWallpapers: recentWallpapersResult.data || [],
+            recentDesigns:
+              recentDesignsResult.data?.map((design) => ({
+                ...design,
+                wallpapers: design.wallpapers
+                  ? { title: normalizeWallpaperTitle(design.wallpapers) }
+                  : null,
+              })) || [],
           };
 
           return json(payload);

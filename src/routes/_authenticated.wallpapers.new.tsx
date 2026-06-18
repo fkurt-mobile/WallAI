@@ -168,6 +168,7 @@ function AddWallpaper() {
       queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
 
       navigate({ to: "/wallpapers" });
     } catch (err: any) {
