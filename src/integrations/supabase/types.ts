@@ -42,6 +42,7 @@ export type Database = {
           onboarding_completed: boolean;
           onboarding_hidden: boolean;
           onboarding_step: number;
+          avatar_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -53,6 +54,7 @@ export type Database = {
           onboarding_completed?: boolean;
           onboarding_hidden?: boolean;
           onboarding_step?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -64,6 +66,7 @@ export type Database = {
           onboarding_completed?: boolean;
           onboarding_hidden?: boolean;
           onboarding_step?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { useProfile } from "@/hooks/use-profile";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ProfileService, CompanyService, AuthService, UsageService } from "@/lib/services";
+import { ProfileService, CompanyService, AuthService } from "@/lib/services";
 import {
   User,
   Building,
@@ -13,6 +13,7 @@ import {
   CreditCard,
   Save,
   RefreshCw,
+  Camera,
   Calendar,
   Check,
   AlertCircle,
@@ -30,6 +31,16 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
+import Cropper from "react-easy-crop";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Settings — Murra" }] }),
@@ -40,8 +51,21 @@ function SettingsPage() {
   const queryClient = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const [activeTab, setActiveTab] = useState<
-    "profile" | "company" | "security" | "usage" | "billing"
+    "profile" | "company" | "security" | "billing"
   >("profile");
+
+  // Crop states
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropImageFile, setCropImageFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isCropOpen, setIsCropOpen] = useState(false);
 
   // Form states
   const [fullName, setFullName] = useState("");
@@ -111,15 +135,89 @@ function SettingsPage() {
     },
   });
 
-  // Query usage stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ["usage-stats", profile?.id, profile?.company_id],
-    queryFn: () => {
-      if (!profile?.id) return null;
-      return UsageService.getUsageStats(profile.id, profile.company_id);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadAvatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!profile?.id) throw new Error("No profile");
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${profile.id}-${Math.random()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { supabase } = await import("@/integrations/supabase/client");
+
+      // We upload to wallpaper-images bucket as a general public bucket
+      const bucket = "wallpaper-images"; 
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: data.publicUrl })
+        .eq("id", profile.id);
+
+      if (updateError) throw updateError;
+      
+      return data.publicUrl;
     },
-    enabled: !!profile?.id,
+    onSuccess: () => {
+      toast.success("Profile photo updated");
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+    },
+    onError: (err: any) => {
+      toast.error("Failed to upload photo: " + err.message);
+    }
   });
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCropImageFile(file);
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        setCropImageSrc(reader.result as string);
+        setIsCropOpen(true);
+        setZoom(1);
+        setCrop({ x: 0, y: 0 });
+      });
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCropComplete = (croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleSaveCroppedImage = async () => {
+    if (!cropImageSrc || !croppedAreaPixels || !cropImageFile) return;
+
+    try {
+      const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
+      const fileExt = cropImageFile.name.split('.').pop() || 'jpg';
+      const croppedFile = new File([croppedBlob], `cropped-avatar.${fileExt}`, {
+        type: croppedBlob.type || "image/jpeg",
+      });
+
+      uploadAvatarMutation.mutate(croppedFile);
+      setIsCropOpen(false);
+      setCropImageSrc(null);
+      setCropImageFile(null);
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Failed to crop image: " + e.message);
+    }
+  };
 
   if (profileLoading) {
     return (
@@ -232,9 +330,26 @@ function SettingsPage() {
 
         {/* Profile Page Header Card */}
         <div className="bg-card border border-brand-900/8 p-8 flex flex-col sm:flex-row items-center gap-6 mb-12 shadow-sm">
-          <div className="size-20 rounded-none bg-gilded text-brand-50 grid place-items-center font-serif text-3xl shrink-0 outline outline-1 outline-offset-4 outline-brand-900/10">
-            {avatarLetter}
+          <div 
+            onClick={handleAvatarClick}
+            className="size-20 relative group rounded-none bg-gilded text-brand-50 flex items-center justify-center font-serif text-3xl shrink-0 outline outline-1 outline-offset-4 outline-brand-900/10 cursor-pointer overflow-hidden"
+          >
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              avatarLetter
+            )}
+            <div className="absolute inset-0 bg-brand-900/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+               {uploadAvatarMutation.isPending ? <RefreshCw className="size-6 animate-spin text-white" /> : <Camera className="size-6 text-white" />}
+            </div>
           </div>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleAvatarChange} 
+            accept="image/*" 
+            className="hidden" 
+          />
           <div className="text-center sm:text-left flex-1 min-w-0">
             <h2 className="font-serif text-3xl text-brand-900 leading-tight">
               {fullName || profile.email}
@@ -257,7 +372,7 @@ function SettingsPage() {
         {/* Tab Navigation Layout */}
         <div className="grid lg:grid-cols-12 gap-10 items-start">
           {/* Navigation Sidebar */}
-          <nav className="lg:col-span-3 flex lg:flex-col gap-1 overflow-x-auto border-b lg:border-b-0 lg:border-r border-brand-900/5 pb-4 lg:pb-0 lg:pr-6">
+          <nav className="lg:col-span-3 flex lg:flex-col gap-1 overflow-x-auto border-b lg:border-b-0 lg:border-r border-brand-900/5 pb-4 lg:pb-0">
             <TabButton
               active={activeTab === "profile"}
               onClick={() => setActiveTab("profile")}
@@ -276,12 +391,7 @@ function SettingsPage() {
               label="Security"
               icon={Shield}
             />
-            <TabButton
-              active={activeTab === "usage"}
-              onClick={() => setActiveTab("usage")}
-              label="Usage Overview"
-              icon={BarChart3}
-            />
+
             <TabButton
               active={activeTab === "billing"}
               onClick={() => setActiveTab("billing")}
@@ -576,90 +686,7 @@ function SettingsPage() {
               </form>
             )}
 
-            {/* USAGE TAB */}
-            {activeTab === "usage" && (
-              <div className="space-y-10">
-                <div>
-                  <h3 className="font-serif text-3xl italic text-brand-900 mb-2">Usage Overview</h3>
-                  <p className="text-xs text-brand-900/55">
-                    Track your studio metrics and wallpaper mockup visualization count.
-                  </p>
-                </div>
 
-                {statsLoading ? (
-                  <p className="text-center font-serif text-xl italic py-16 text-brand-900/40">
-                    Loading usage statistics...
-                  </p>
-                ) : !stats ? (
-                  <p className="text-center text-sm py-16 text-brand-900/40">No stats available.</p>
-                ) : (
-                  <>
-                    {/* Stats Cards Grid */}
-                    <div className="grid sm:grid-cols-3 gap-px bg-brand-900/5 border border-brand-900/5">
-                      <div className="bg-card p-6">
-                        <p className="text-[9px] uppercase tracking-[0.2em] text-brand-900/40 flex items-center gap-1.5">
-                          <Images className="size-3 text-brand-900/40" /> Total Wallpapers
-                        </p>
-                        <p className="font-serif text-4xl mt-3">{stats.wallpapersCount}</p>
-                      </div>
-                      <div className="bg-card p-6">
-                        <p className="text-[9px] uppercase tracking-[0.2em] text-brand-900/40 flex items-center gap-1.5">
-                          <Sparkles className="size-3 text-brand-900/40" /> Total Visuals
-                        </p>
-                        <p className="font-serif text-4xl mt-3">{stats.visualizationsCount}</p>
-                      </div>
-                      <div className="bg-card p-6">
-                        <p className="text-[9px] uppercase tracking-[0.2em] text-brand-900/40 flex items-center gap-1.5">
-                          <Home className="size-3 text-brand-900/40" /> Mockup Rooms
-                        </p>
-                        <p className="font-serif text-4xl mt-3">{stats.mockupsCount}</p>
-                      </div>
-                    </div>
-
-                    {/* Chart Section */}
-                    <div className="border border-brand-900/8 p-6 bg-brand-50/20">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/50 mb-6 font-medium">
-                        Visualizations Created (Last 30 Days)
-                      </p>
-                      <CustomChart data={stats.chartData} />
-                    </div>
-
-                    {/* Recent Activity List */}
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/50 mb-4 font-medium flex items-center gap-1.5">
-                        <Clock className="size-3.5" /> Recent Activity
-                      </p>
-                      {stats.recentActivity.length === 0 ? (
-                        <div className="border border-dashed border-brand-900/10 p-8 text-center text-xs text-brand-900/40 italic font-serif">
-                          No recent actions logged.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-brand-900/5 border border-brand-900/5 bg-brand-50/10">
-                          {stats.recentActivity.map((activity) => (
-                            <div
-                              key={activity.id}
-                              className="p-4 flex justify-between items-start gap-4 hover:bg-brand-50/35 transition-colors"
-                            >
-                              <div>
-                                <p className="text-xs font-semibold text-brand-900">
-                                  {activity.title}
-                                </p>
-                                <p className="text-[11px] text-brand-900/60 mt-1">
-                                  {activity.description}
-                                </p>
-                              </div>
-                              <span className="text-[10px] text-brand-900/40 shrink-0 font-mono">
-                                {activity.date}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
 
             {/* BILLING TAB */}
             {activeTab === "billing" && (
@@ -703,8 +730,121 @@ function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isCropOpen} onOpenChange={(open) => {
+        setIsCropOpen(open);
+        if (!open) {
+          setCropImageSrc(null);
+          setCropImageFile(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[450px] bg-card border border-brand-900/10">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl text-brand-900">Crop Profile Photo</DialogTitle>
+            <DialogDescription className="text-xs text-brand-900/60">
+              Drag to reposition and use the slider to zoom.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative w-full h-[300px] bg-brand-950/20 overflow-hidden">
+            {cropImageSrc && (
+              <Cropper
+                image={cropImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={handleCropComplete}
+              />
+            )}
+          </div>
+          <div className="space-y-2 py-4">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-brand-900/50 block">Zoom</span>
+            <Slider
+              value={[zoom]}
+              min={1}
+              max={3}
+              step={0.1}
+              onValueChange={(value) => setZoom(value[0])}
+              className="w-full"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <button
+              type="button"
+              onClick={() => setIsCropOpen(false)}
+              className="border border-brand-900/15 bg-transparent px-5 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-brand-900/5 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveCroppedImage}
+              disabled={uploadAvatarMutation.isPending}
+              className="bg-brand-900 text-brand-50 px-5 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
+            >
+              {uploadAvatarMutation.isPending ? (
+                <>
+                  <RefreshCw className="size-3 animate-spin" /> Saving...
+                </>
+              ) : (
+                "Apply Crop"
+              )}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
+}
+
+// Helper to crop image
+async function getCroppedImg(
+  imageSrc: string,
+  pixelCrop: { x: number; y: number; width: number; height: number }
+): Promise<Blob> {
+  const image = new Image();
+  image.src = imageSrc;
+  image.crossOrigin = "anonymous";
+
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+  });
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    throw new Error("No 2d context");
+  }
+
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Canvas is empty"));
+        return;
+      }
+      resolve(blob);
+    }, "image/jpeg", 0.95);
+  });
 }
 
 // Helper Tab Button Component
