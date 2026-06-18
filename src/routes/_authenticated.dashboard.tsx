@@ -12,18 +12,17 @@ import {
   parseDatabaseDate,
 } from "@/lib/dates";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ActivityFeedItem } from "@/lib/activity";
 import { logActivityEvent } from "@/lib/activity-client";
 import {
+  ArrowRight,
   CircleHelp,
   Download,
   Eye,
+  Grid2x2,
+  Images,
+  type LucideIcon,
   Pencil,
   RefreshCw,
   Share2,
@@ -109,7 +108,11 @@ function Dashboard() {
   const topWallpapersTracked = useRef(false);
   const activityTracked = useRef(false);
 
-  const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useQuery({
+  const {
+    data: metrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+  } = useQuery({
     queryKey: ["dashboard-metrics", profile?.id],
     queryFn: async () => {
       const {
@@ -181,6 +184,12 @@ function Dashboard() {
   const latestViz = recentDesigns[0] || null;
   const isLoading = profileLoading || metricsLoading;
   const showSuccessRateCard = metrics?.successRate !== null;
+  const hasWallpapers = (metrics?.totalWallpapers || 0) > 0;
+  const userName = getDisplayName(profile?.full_name, profile?.email);
+  const visibleRecentDesigns = recentDesigns.slice(0, 4);
+  const visibleRecentWallpapers = recentWallpapers.slice(0, 6);
+  const visibleTopWallpapers = topWallpapers.slice(0, 5);
+  const visibleActivityItems = activityItems.slice(0, 8);
 
   useEffect(() => {
     if (latestViz) {
@@ -227,6 +236,73 @@ function Dashboard() {
     }
     navigate({ to: "/tools/wallpaper-visualizer" });
   };
+
+  const handleQuickActionAddWallpaper = () => {
+    trackEvent("quick_action_add_wallpaper");
+    navigate({ to: "/wallpapers/new" });
+  };
+
+  const handleQuickActionAiDesign = () => {
+    trackEvent("quick_action_ai_design");
+
+    if (!hasWallpapers) {
+      toast.error("Upload a wallpaper first to generate designs.");
+      navigate({ to: "/wallpapers/new" });
+      return;
+    }
+
+    navigate({ to: "/tools/wallpaper-visualizer" });
+  };
+
+  const handleQuickActionBrowseVisualizations = () => {
+    trackEvent("quick_action_browse_visualizations");
+    navigate({ to: "/visualizations" });
+  };
+
+  const handleQuickActionWallpaperLibrary = () => {
+    trackEvent("quick_action_wallpaper_library");
+    navigate({ to: "/wallpapers" });
+  };
+
+  const quickActions = [
+    {
+      key: "add-wallpaper",
+      icon: Upload,
+      title: "Upload Wallpaper",
+      description: "Upload a new wallpaper to your catalog.",
+      onClick: handleQuickActionAddWallpaper,
+      ariaLabel: "Add wallpaper",
+    },
+    {
+      key: "ai-design",
+      icon: Sparkles,
+      title: "Create AI Design",
+      description: hasWallpapers
+        ? "Generate a room visualization using AI."
+        : "Upload your first wallpaper to start creating AI designs.",
+      onClick: handleQuickActionAiDesign,
+      ariaLabel: hasWallpapers
+        ? "Create an AI room design"
+        : "Upload a wallpaper first to create an AI room design",
+      badge: hasWallpapers ? undefined : "Setup Required",
+    },
+    {
+      key: "browse-designs",
+      icon: Images,
+      title: "Browse Designs",
+      description: "Explore your generated room designs.",
+      onClick: handleQuickActionBrowseVisualizations,
+      ariaLabel: "Browse generated designs",
+    },
+    {
+      key: "wallpaper-library",
+      icon: Grid2x2,
+      title: "Wallpaper Library",
+      description: "Manage your wallpaper collection.",
+      onClick: handleQuickActionWallpaperLibrary,
+      ariaLabel: "Open wallpaper library",
+    },
+  ];
 
   const handleOpenDesign = (designId: string) => {
     trackEvent("dashboard_recent_design_opened");
@@ -330,574 +406,660 @@ function Dashboard() {
 
   return (
     <AppShell>
-      <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-14">
-          <div className="max-w-3xl">
-            <span className="text-[11px] uppercase tracking-[0.2em] text-accent font-medium">
-              {isLoading
-                ? "LOADING..."
-                : `WELCOME BACK, ${(profile?.full_name || profile?.email || "User").toUpperCase()}`}
-            </span>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl mt-3 leading-tight text-brand-900">
-              Design rooms around your wallpapers with AI.
-            </h1>
-            <p className="mt-4 text-brand-900/65 text-sm md:text-base max-w-2xl leading-relaxed">
-              Upload wallpaper collections, generate styled interiors, and create client-ready
-              visualizations in minutes.
-            </p>
-          </div>
-          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto shrink-0 md:justify-end">
-            <button
-              type="button"
-              onClick={handleStartDesign}
-              className="w-full md:w-auto bg-brand-900 text-brand-50 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer text-center font-medium shrink-0"
-            >
-              Start New Design
-            </button>
-            <Link
-              to="/wallpapers/new"
-              onClick={() => trackEvent("dashboard_add_wallpaper_clicked")}
-              className="w-full md:w-auto border border-brand-900/15 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block shrink-0"
-            >
-              Add Wallpaper
-            </Link>
-          </div>
-        </div>
-
+      <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10 lg:py-12">
         <TooltipProvider delayDuration={150}>
-          <div
-            className={`grid gap-px bg-brand-900/5 mb-16 ${
-              showSuccessRateCard ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"
-            }`}
-          >
-            {metricsLoading ? (
-              <>
-                <StatSkeleton />
-                <StatSkeleton />
-                <StatSkeleton />
-                {showSuccessRateCard !== false && <StatSkeleton />}
-              </>
-            ) : metrics ? (
-              <>
-                <StatCard
-                  label="Wallpapers"
-                  tooltip="Total uploaded wallpapers."
-                  value={String(metrics.totalWallpapers)}
-                  insight={
-                    metrics.totalWallpapers === 0
-                      ? "Upload your first wallpaper"
-                      : `+${metrics.newWallpapersMonth} this month`
-                  }
-                  note={
-                    metrics.mostUsedWallpaper && metrics.mostUsedWallpaperCount > 0
-                      ? `Most used: ${metrics.mostUsedWallpaper} · ${metrics.mostUsedWallpaperCount} visualization${metrics.mostUsedWallpaperCount === 1 ? "" : "s"}`
-                      : undefined
-                  }
-                />
-                <StatCard
-                  label="Visualizations"
-                  tooltip="Generated room previews."
-                  value={String(metrics.totalVisualizations)}
-                  insight={
-                    metrics.totalVisualizations === 0
-                      ? "Generate your first room"
-                      : `${metrics.sharedVisualizations} shared`
-                  }
-                />
-                <StatCard
-                  label="AI Designs"
-                  tooltip="Total AI generation jobs."
-                  value={String(metrics.totalAiGenerations)}
-                  insight={
-                    metrics.totalAiGenerations === 0
-                      ? "Start creating"
-                      : `${metrics.todayAiGenerations} today`
-                  }
-                />
-                {showSuccessRateCard && (
-                  <StatCard
-                    label="Success Rate"
-                    tooltip="Completed generations divided by total requests."
-                    value={`${metrics.successRate}%`}
-                    insight="Generation success"
-                  />
-                )}
-              </>
-            ) : (
-              <>
-                <StatCard
-                  label="Wallpapers"
-                  tooltip="Total uploaded wallpapers."
-                  value="0"
-                  insight="Upload your first wallpaper"
-                />
-                <StatCard
-                  label="Visualizations"
-                  tooltip="Generated room previews."
-                  value="0"
-                  insight="Generate your first room"
-                />
-                <StatCard
-                  label="AI Designs"
-                  tooltip="Total AI generation jobs."
-                  value="0"
-                  insight="Start creating"
-                />
-              </>
-            )}
-          </div>
-
-          {!isLoading && latestViz && (
-            <section className="mb-16">
-              <div className="mb-6">
-                <h2 className="font-serif text-3xl italic">Continue Working</h2>
-                <p className="text-xs text-brand-900/50 mt-1">
-                  Resume your latest AI-generated room design.
-                </p>
-              </div>
-
-              <div className="bg-card border border-brand-900/8 p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 shadow-sm">
-                <div className="w-full md:w-72 aspect-[4/3] shrink-0 overflow-hidden bg-brand-100 relative group/continue-img">
-                  <img
-                    src={latestViz.result_image_url}
-                    alt={latestViz.wallpapers?.title || "Latest design"}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover/continue-img:scale-105 animate-in fade-in"
-                  />
-                </div>
-
-                <div className="flex-1 min-w-0 w-full">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
-                    Details
+          <section className="mb-8 overflow-hidden border border-brand-900/8 bg-card shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)]">
+            <div className="bg-[radial-gradient(circle_at_top_right,rgba(196,163,110,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.9))] p-6 md:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.24em] text-accent">
+                    Workspace Dashboard
                   </p>
-                  <h3 className="font-serif text-2xl italic text-brand-900 leading-tight mt-2 mb-5">
-                    {latestViz.wallpapers?.title || "AI Room Design"}
-                  </h3>
-                  <div className="space-y-2.5 max-w-md">
-                    <DetailRow label="Room Type" value={latestViz.room_type || "Room"} />
-                    <DetailRow label="Style" value={latestViz.style || "Style"} />
-                    <DetailRow label="Mood" value={latestViz.mood || "Mood"} />
-                    <DetailRow label="Created" value={formatShortDate(latestViz.created_at)} />
+                  <h1 className="mt-3 font-serif text-3xl leading-tight text-brand-900 md:text-4xl lg:text-[2.8rem]">
+                    {isLoading ? "Good afternoon." : `Good afternoon, ${userName}.`}
+                  </h1>
+                  <p className="mt-3 text-lg text-brand-900/85 md:text-xl">
+                    Design rooms around your wallpapers with AI.
+                  </p>
+                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-brand-900/60 md:text-base">
+                    {metrics
+                      ? `You have ${metrics.totalWallpapers} wallpaper${metrics.totalWallpapers === 1 ? "" : "s"} and ${metrics.totalVisualizations} visualization${metrics.totalVisualizations === 1 ? "" : "s"} in your workspace.`
+                      : "Loading your wallpaper and visualization totals."}
+                  </p>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    {quickActions.map((action) => (
+                      <QuickActionCard key={action.key} {...action} />
+                    ))}
                   </div>
-                  <p className="text-xs text-accent font-medium mt-4">
-                    {formatRelativeGeneratedTime(latestViz.created_at)}
-                  </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row md:flex-col gap-3 w-full md:w-auto shrink-0 justify-end md:items-stretch">
-                  <Link
-                    to="/visualizations/$id"
-                    params={{ id: latestViz.id }}
-                    onClick={() => trackEvent("dashboard_continue_working_opened")}
-                    className="w-full bg-brand-900 text-brand-50 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors text-center font-medium shrink-0"
-                  >
-                    Open Design
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => handleGenerateSimilar(latestViz)}
-                    disabled={!latestViz.wallpaper_id}
-                    className="w-full border border-brand-900/15 px-8 py-3.5 text-[11px] uppercase tracking-[0.2em] hover:bg-card transition-colors text-center font-medium block shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Generate Similar
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          <section className="mb-16">
-            <div className="flex items-end justify-between gap-6 mb-6">
-              <div>
-                <h2 className="font-serif text-3xl italic">Recent AI Designs</h2>
-                <p className="text-sm text-brand-900/55 mt-2">
-                  Your latest AI-generated interiors and room concepts.
-                </p>
-              </div>
-              <Link
-                to="/visualizations"
-                className="text-[11px] uppercase tracking-[0.2em] text-accent hover:underline whitespace-nowrap"
-              >
-                View All →
-              </Link>
-            </div>
-
-            {metricsLoading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
-                <RecentDesignSkeleton />
-                <RecentDesignSkeleton />
-                <RecentDesignSkeleton />
-              </div>
-            ) : recentDesigns.length === 0 ? (
-              <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
-                <Sparkles className="size-10 text-accent/50 mx-auto mb-5" />
-                <p className="text-brand-900 font-serif text-2xl italic">No AI designs yet.</p>
-                <p className="text-brand-900/55 mt-3 mb-8">
-                  Upload a wallpaper and create your first AI room.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleStartDesign}
-                  className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
-                >
-                  Start New Design
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
-                {recentDesigns.map((design) => (
-                  <article
-                    key={design.id}
-                    className="group bg-card border border-brand-900/6 overflow-hidden shadow-[0_18px_50px_-30px_rgba(15,23,42,0.35)]"
-                  >
-                    <div className="relative aspect-[5/4] overflow-hidden bg-brand-100">
-                      <img
-                        src={design.result_image_url}
-                        alt={design.wallpapers?.title || "AI room design"}
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-brand-950/55 via-brand-950/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                      <div className="absolute left-4 top-4 flex items-center gap-2">
-                        {getRecentDesignBadge(design.created_at) ? (
-                          <span className="bg-brand-50/92 text-brand-900 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] font-medium">
-                            {getRecentDesignBadge(design.created_at)}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="absolute right-4 top-4 flex gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                        <OverlayIconButton
-                          label="View design"
-                          onClick={() => handleOpenDesign(design.id)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </OverlayIconButton>
-                        <OverlayIconLink
-                          label="Download design"
-                          href={design.result_image_url}
-                          download
-                          onClick={() => handleDownloadDesign(design)}
-                        >
-                          <Download className="h-4 w-4" />
-                        </OverlayIconLink>
-                        <OverlayIconButton
-                          label="Share design"
-                          onClick={() => void handleShareDesign(design)}
-                        >
-                          <Share2 className="h-4 w-4" />
-                        </OverlayIconButton>
-                      </div>
-                    </div>
-
-                    <div className="p-6">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
-                        {design.room_type || "Room"}
-                      </p>
-                      <h3 className="font-serif text-2xl italic text-brand-900 mt-2">
-                        {design.wallpapers?.title || "AI Room Design"}
-                      </h3>
-                      <p className="text-sm text-brand-900/50 mt-2">
-                        Created {formatCreatedLabel(design.created_at)}
-                      </p>
-
-                      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDesign(design.id)}
-                          className="flex-1 bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
-                        >
-                          Open Design
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateSimilar(design)}
-                          disabled={!design.wallpaper_id}
-                          className="flex-1 border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-50 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Generate Similar
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="mb-16">
-            <div className="flex items-end justify-between gap-6 mb-6">
-              <div>
-                <h2 className="font-serif text-3xl italic">Top Wallpapers</h2>
-                <p className="text-sm text-brand-900/55 mt-2">
-                  Your most-used wallpapers across AI-generated designs.
-                </p>
-              </div>
-              <Link
-                to="/wallpapers"
-                className="text-[11px] uppercase tracking-[0.2em] text-accent hover:underline whitespace-nowrap"
-              >
-                View Collection →
-              </Link>
-            </div>
-
-            <div className="mb-6 border border-brand-900/8 bg-card px-6 py-5 shadow-sm">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
-                Insight
-              </p>
-              <p className="mt-3 font-serif text-2xl italic leading-tight text-brand-900">
-                {getTopWallpaperInsight(topWallpapers)}
-              </p>
-            </div>
-
-            {metricsLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
-                <TopWallpaperSkeleton />
-                <TopWallpaperSkeleton />
-                <TopWallpaperSkeleton />
-                <TopWallpaperSkeleton />
-                <TopWallpaperSkeleton />
-              </div>
-            ) : topWallpapers.length === 0 ? (
-              <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
-                <p className="text-brand-900 font-serif text-2xl italic">
-                  No wallpaper performance data yet.
-                </p>
-                <p className="text-brand-900/55 mt-3 mb-8">
-                  Generate your first AI design to start seeing trends.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleStartDesign}
-                  className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
-                >
-                  Start New Design
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
-                {topWallpapers.map((wallpaper, index) => {
-                  const badge = getTopWallpaperBadge(wallpaper, index);
-
-                  return (
-                    <article
-                      key={wallpaper.wallpaper_id}
-                      className="group overflow-hidden border border-brand-900/8 bg-card shadow-[0_20px_55px_-36px_rgba(15,23,42,0.38)]"
-                    >
-                      <div className="relative aspect-[4/5] overflow-hidden bg-brand-100">
-                        <img
-                          src={wallpaper.thumbnail_url}
-                          alt={wallpaper.wallpaper_name}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-brand-950/45 via-transparent to-transparent" />
-                        <div className="absolute left-4 top-4 flex items-center gap-2">
-                          <span className="bg-brand-50/92 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-brand-900">
-                            #{index + 1}
-                          </span>
-                          {badge ? (
-                            <span className="border border-amber-300/70 bg-amber-100/92 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-950">
-                              {badge}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="p-5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
-                              {wallpaper.category}
-                            </p>
-                            <h3 className="mt-2 font-serif text-2xl italic leading-tight text-brand-900">
-                              {wallpaper.wallpaper_name}
-                            </h3>
-                          </div>
-                          {wallpaper.wallpaper_code ? (
-                            <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">
-                              {wallpaper.wallpaper_code}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-5 space-y-3 border-t border-brand-900/8 pt-4">
-                          <MetricLine
-                            label="Visualizations"
-                            value={String(wallpaper.visualization_count)}
-                          />
-                          <MetricLine
-                            label="AI Designs"
-                            value={String(wallpaper.ai_generation_count)}
-                          />
-                        </div>
-
-                        <p className="mt-4 text-sm text-brand-900/55">
-                          Last used {formatRelativeTimeLabel(wallpaper.last_used_at)}
-                        </p>
-
-                        <div className="mt-6 flex flex-col gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenWallpaper(wallpaper.wallpaper_id)}
-                            className="w-full bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
-                          >
-                            Open Wallpaper
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateFromWallpaper(wallpaper.wallpaper_id)}
-                            className="w-full border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-50 transition-colors cursor-pointer"
-                          >
-                            Generate Design
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <div className="flex items-end justify-between gap-6 mb-6">
-              <div>
-                <h2 className="font-serif text-3xl italic">Recently Added Wallpapers</h2>
-                <p className="text-sm text-brand-900/55 mt-2">
-                  The latest wallpapers added to your Murra catalog.
-                </p>
-              </div>
-              <Link
-                to="/wallpapers"
-                className="text-[11px] uppercase tracking-[0.2em] text-accent hover:underline whitespace-nowrap"
-              >
-                View all →
-              </Link>
-            </div>
-
-            {recentWallpapers.length === 0 ? (
-              <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
-                <p className="text-brand-900/50 font-serif text-xl italic mb-4">
-                  No wallpapers in your catalog yet
-                </p>
-                <Link
-                  to="/wallpapers/new"
-                  className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors"
-                >
-                  Add Your First Wallpaper
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-                {recentWallpapers.map((wallpaper) => (
-                  <Link key={wallpaper.id} to="/wallpapers" className="group">
-                    <img
-                      src={wallpaper.image_url}
-                      alt={wallpaper.title}
-                      className="aspect-square w-full object-cover outline-1 -outline-offset-1 outline-black/5 group-hover:outline-accent transition-all"
-                    />
-                    <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
-                      {wallpaper.product_code}
-                    </p>
-                    <p className="text-sm font-medium">{wallpaper.title}</p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="mt-16">
-            <div className="flex items-end justify-between gap-6 mb-6">
-              <div>
-                <h2 className="font-serif text-3xl italic">Activity</h2>
-                <p className="text-sm text-brand-900/55 mt-2">
-                  Recent actions across your wallpaper studio.
-                </p>
-              </div>
-            </div>
-
-            <div className="border border-brand-900/8 bg-card shadow-sm">
-              {activityLoading ? (
-                <div className="p-6 md:p-8">
-                  <ActivitySkeleton />
-                  <ActivitySkeleton />
-                  <ActivitySkeleton />
-                  <ActivitySkeleton />
-                </div>
-              ) : activityItems.length === 0 ? (
-                <div className="py-16 px-8 text-center">
-                  <Sparkles className="size-10 text-accent/45 mx-auto mb-5" />
-                  <p className="text-brand-900 font-serif text-2xl italic">No activity yet.</p>
-                  <p className="text-brand-900/55 mt-3 mb-8">
-                    Upload your first wallpaper or generate your first AI room design.
-                  </p>
+                <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
                   <button
                     type="button"
                     onClick={handleStartDesign}
-                    className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
+                    className="w-full bg-brand-900 px-6 py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800 sm:w-auto"
                   >
-                    Start Designing
+                    Start New Design
                   </button>
+                  <Link
+                    to="/wallpapers/new"
+                    onClick={() => trackEvent("dashboard_add_wallpaper_clicked")}
+                    className="w-full border border-brand-900/15 bg-white/80 px-6 py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] transition-colors hover:bg-brand-50 sm:w-auto"
+                  >
+                    Add Wallpaper
+                  </Link>
                 </div>
-              ) : (
-                <div className="p-6 md:p-8">
-                  {activityItems.map((item, index) => {
-                    const Icon = getActivityIcon(item.type);
-                    const rowContent = (
-                      <>
-                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center border border-brand-900/10 bg-brand-50">
-                          <Icon className="h-4 w-4 text-brand-900/75" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-brand-900 leading-relaxed">{item.title}</p>
-                          <p className="mt-1 text-xs text-brand-900/45">
-                            {formatRelativeActivityTime(item.created_at)}
-                          </p>
-                        </div>
-                        {item.thumbnail_url ? (
-                          <img
-                            src={item.thumbnail_url}
-                            alt=""
-                            className="hidden h-12 w-12 shrink-0 object-cover md:block"
-                          />
-                        ) : null}
-                      </>
-                    );
+              </div>
+            </div>
+          </section>
 
-                    if (item.href) {
+          <section className="mb-8">
+            <div className="mb-5 flex items-end justify-between gap-6">
+              <div>
+                <h2 className="font-serif text-3xl italic">Continue Working</h2>
+                <p className="mt-1 text-xs text-brand-900/50">
+                  Resume your latest AI-generated room design.
+                </p>
+              </div>
+            </div>
+
+            {metricsLoading ? (
+              <div className="border border-brand-900/8 bg-card p-6 shadow-sm md:p-8">
+                <div className="flex flex-col gap-6 md:flex-row md:items-center">
+                  <Skeleton className="aspect-[4/3] w-full max-w-sm bg-brand-900/8 md:w-72" />
+                  <div className="flex-1 space-y-3">
+                    <Skeleton className="h-3 w-24 bg-brand-900/8" />
+                    <Skeleton className="h-9 w-2/3 bg-brand-900/10" />
+                    <Skeleton className="h-4 w-1/2 bg-brand-900/8" />
+                    <Skeleton className="h-4 w-2/5 bg-brand-900/6" />
+                  </div>
+                  <div className="flex w-full flex-col gap-3 md:w-44">
+                    <Skeleton className="h-11 w-full bg-brand-900/10" />
+                    <Skeleton className="h-11 w-full bg-brand-900/6" />
+                  </div>
+                </div>
+              </div>
+            ) : latestViz ? (
+              <div className="border border-brand-900/8 bg-card p-6 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.45)] md:p-8">
+                <div className="flex flex-col gap-6 xl:flex-row xl:items-center">
+                  <div className="group/continue-img relative aspect-[4/3] w-full overflow-hidden bg-brand-100 xl:w-80 xl:shrink-0">
+                    <img
+                      src={latestViz.result_image_url}
+                      alt={latestViz.wallpapers?.title || "Latest design"}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover/continue-img:scale-105"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
+                      Latest Design
+                    </p>
+                    <h3 className="mt-2 font-serif text-3xl italic leading-tight text-brand-900">
+                      {latestViz.wallpapers?.title || "AI Room Design"}
+                    </h3>
+                    <p className="mt-3 text-sm text-brand-900/55">
+                      {latestViz.room_type || "Room"} · {formatRelativeGeneratedTime(latestViz.created_at)}
+                    </p>
+
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:max-w-xl">
+                      <DetailRow label="Room Type" value={latestViz.room_type || "Room"} />
+                      <DetailRow label="Style" value={latestViz.style || "Style"} />
+                      <DetailRow label="Mood" value={latestViz.mood || "Mood"} />
+                      <DetailRow label="Created" value={formatShortDate(latestViz.created_at)} />
+                    </div>
+                  </div>
+
+                  <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-48 xl:flex-col">
+                    <Link
+                      to="/visualizations/$id"
+                      params={{ id: latestViz.id }}
+                      onClick={() => trackEvent("dashboard_continue_working_opened")}
+                      className="w-full bg-brand-900 px-6 py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                    >
+                      Open Design
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateSimilar(latestViz)}
+                      disabled={!latestViz.wallpaper_id}
+                      className="w-full border border-brand-900/15 px-6 py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Generate Similar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="border border-dashed border-brand-900/15 bg-card px-8 py-14 text-center">
+                <Sparkles className="mx-auto mb-5 size-10 text-accent/45" />
+                <p className="font-serif text-2xl italic text-brand-900">No recent design to resume.</p>
+                <p className="mx-auto mt-3 max-w-xl text-brand-900/55">
+                  Upload a wallpaper and generate your first room visualization to populate this area.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStartDesign}
+                  className="mt-8 inline-flex items-center gap-2 bg-brand-900 px-6 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                >
+                  Start New Design
+                </button>
+              </div>
+            )}
+          </section>
+
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.75fr)] lg:items-start">
+            <div className="space-y-8">
+              <section>
+                <div className="mb-5 flex items-end justify-between gap-6">
+                  <div>
+                    <h2 className="font-serif text-3xl italic">Recent AI Designs</h2>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      Your latest AI-generated interiors and room concepts.
+                    </p>
+                  </div>
+                  <Link
+                    to="/visualizations"
+                    className="whitespace-nowrap text-[11px] uppercase tracking-[0.2em] text-accent hover:underline"
+                  >
+                    View All →
+                  </Link>
+                </div>
+
+                {metricsLoading ? (
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    <RecentDesignSkeleton />
+                    <RecentDesignSkeleton />
+                    <RecentDesignSkeleton />
+                    <RecentDesignSkeleton />
+                  </div>
+                ) : recentDesigns.length === 0 ? (
+                  <div className="border border-dashed border-brand-900/15 bg-card px-8 py-16 text-center">
+                    <Sparkles className="mx-auto mb-5 size-10 text-accent/50" />
+                    <p className="font-serif text-2xl italic text-brand-900">No AI designs yet.</p>
+                    <p className="mt-3 text-brand-900/55">
+                      Upload a wallpaper and create your first AI room.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartDesign}
+                      className="mt-8 inline-flex items-center gap-2 bg-brand-900 px-6 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                    >
+                      Start New Design
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {visibleRecentDesigns.map((design) => (
+                      <article
+                        key={design.id}
+                        className="group overflow-hidden border border-brand-900/6 bg-card shadow-[0_18px_50px_-30px_rgba(15,23,42,0.35)]"
+                      >
+                        <div className="relative aspect-[5/4] overflow-hidden bg-brand-100">
+                          <img
+                            src={design.result_image_url}
+                            alt={design.wallpapers?.title || "AI room design"}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-brand-950/55 via-brand-950/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                          <div className="absolute left-4 top-4 flex items-center gap-2">
+                            {getRecentDesignBadge(design.created_at) ? (
+                              <span className="bg-brand-50/92 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-brand-900">
+                                {getRecentDesignBadge(design.created_at)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="absolute right-4 top-4 flex gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                            <OverlayIconButton
+                              label="View design"
+                              onClick={() => handleOpenDesign(design.id)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </OverlayIconButton>
+                            <OverlayIconLink
+                              label="Download design"
+                              href={design.result_image_url}
+                              download
+                              onClick={() => handleDownloadDesign(design)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </OverlayIconLink>
+                            <OverlayIconButton
+                              label="Share design"
+                              onClick={() => void handleShareDesign(design)}
+                            >
+                              <Share2 className="h-4 w-4" />
+                            </OverlayIconButton>
+                          </div>
+                        </div>
+
+                        <div className="p-6">
+                          <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
+                            {design.room_type || "Room"}
+                          </p>
+                          <h3 className="mt-2 font-serif text-2xl italic text-brand-900">
+                            {design.wallpapers?.title || "AI Room Design"}
+                          </h3>
+                          <p className="mt-2 text-sm text-brand-900/50">
+                            Created {formatCreatedLabel(design.created_at)}
+                          </p>
+
+                          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDesign(design.id)}
+                              className="flex-1 bg-brand-900 px-5 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                            >
+                              Open Design
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateSimilar(design)}
+                              disabled={!design.wallpaper_id}
+                              className="flex-1 border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Generate Similar
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <div className="mb-5 flex items-end justify-between gap-6">
+                  <div>
+                    <h2 className="font-serif text-3xl italic">Recently Added Wallpapers</h2>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      The latest wallpapers added to your Murra catalog.
+                    </p>
+                  </div>
+                  <Link
+                    to="/wallpapers"
+                    className="whitespace-nowrap text-[11px] uppercase tracking-[0.2em] text-accent hover:underline"
+                  >
+                    View All →
+                  </Link>
+                </div>
+
+                {recentWallpapers.length === 0 ? (
+                  <div className="border border-dashed border-brand-900/15 bg-card px-8 py-14 text-center">
+                    <p className="mb-4 font-serif text-xl italic text-brand-900/55">
+                      No wallpapers in your catalog yet
+                    </p>
+                    <Link
+                      to="/wallpapers/new"
+                      className="inline-flex items-center gap-2 bg-brand-900 px-6 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                    >
+                      Add Your First Wallpaper
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {visibleRecentWallpapers.map((wallpaper) => (
+                      <Link
+                        key={wallpaper.id}
+                        to="/wallpapers"
+                        className="group overflow-hidden border border-brand-900/8 bg-card p-3 transition-colors hover:border-accent/35"
+                      >
+                        <img
+                          src={wallpaper.image_url}
+                          alt={wallpaper.title}
+                          className="aspect-square w-full object-cover"
+                        />
+                        <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-brand-900/40">
+                          {wallpaper.product_code || "Wallpaper"}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-sm font-medium text-brand-900">
+                          {wallpaper.title}
+                        </p>
+                        <p className="mt-2 text-xs text-brand-900/45">
+                          Added {formatCreatedLabel(wallpaper.created_at)}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <aside className="space-y-6 lg:sticky lg:top-24">
+              <section className="border border-brand-900/8 bg-card p-5 shadow-sm">
+                <div className="mb-4">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.24em] text-accent">
+                    Workspace Overview
+                  </p>
+                  <p className="mt-2 text-sm text-brand-900/55">
+                    Core studio metrics and generation health.
+                  </p>
+                </div>
+
+                {metricsLoading ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    <StatSkeleton />
+                    <StatSkeleton />
+                    <StatSkeleton />
+                    <StatSkeleton />
+                  </div>
+                ) : metrics ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    <StatCard
+                      label="Wallpapers"
+                      tooltip="Total uploaded wallpapers."
+                      value={String(metrics.totalWallpapers)}
+                      insight={
+                        metrics.totalWallpapers === 0
+                          ? "Upload your first wallpaper"
+                          : `+${metrics.newWallpapersMonth} this month`
+                      }
+                      note={
+                        metrics.mostUsedWallpaper && metrics.mostUsedWallpaperCount > 0
+                          ? `Most used: ${metrics.mostUsedWallpaper} · ${metrics.mostUsedWallpaperCount}`
+                          : undefined
+                      }
+                    />
+                    <StatCard
+                      label="Visualizations"
+                      tooltip="Generated room previews."
+                      value={String(metrics.totalVisualizations)}
+                      insight={
+                        metrics.totalVisualizations === 0
+                          ? "Generate your first room"
+                          : `${metrics.sharedVisualizations} shared`
+                      }
+                    />
+                    <StatCard
+                      label="AI Designs"
+                      tooltip="Total AI generation jobs."
+                      value={String(metrics.totalAiGenerations)}
+                      insight={
+                        metrics.totalAiGenerations === 0
+                          ? "Start creating"
+                          : `${metrics.todayAiGenerations} today`
+                      }
+                    />
+                    {showSuccessRateCard && (
+                      <StatCard
+                        label="Success Rate"
+                        tooltip="Completed generations divided by total requests."
+                        value={`${metrics.successRate}%`}
+                        insight="Generation success"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    <StatCard
+                      label="Wallpapers"
+                      tooltip="Total uploaded wallpapers."
+                      value="0"
+                      insight="Upload your first wallpaper"
+                    />
+                    <StatCard
+                      label="Visualizations"
+                      tooltip="Generated room previews."
+                      value="0"
+                      insight="Generate your first room"
+                    />
+                    <StatCard
+                      label="AI Designs"
+                      tooltip="Total AI generation jobs."
+                      value="0"
+                      insight="Start creating"
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="border border-brand-900/8 bg-card p-5 shadow-sm">
+                <div className="mb-4">
+                  <h2 className="font-serif text-2xl italic">Activity Feed</h2>
+                  <p className="mt-2 text-sm text-brand-900/55">
+                    Recent actions across your wallpaper studio.
+                  </p>
+                </div>
+
+                {activityLoading ? (
+                  <div className="space-y-1">
+                    <ActivitySkeleton />
+                    <ActivitySkeleton />
+                    <ActivitySkeleton />
+                    <ActivitySkeleton />
+                  </div>
+                ) : activityItems.length === 0 ? (
+                  <div className="px-2 py-8 text-center">
+                    <Sparkles className="mx-auto mb-4 size-8 text-accent/45" />
+                    <p className="font-serif text-xl italic text-brand-900">No activity yet.</p>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      Upload your first wallpaper or generate your first AI room design.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartDesign}
+                      className="mt-6 inline-flex items-center gap-2 bg-brand-900 px-5 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                    >
+                      Start Designing
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {visibleActivityItems.map((item, index) => {
+                      const Icon = getActivityIcon(item.type);
+                      const rowContent = (
+                        <>
+                          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center border border-brand-900/10 bg-brand-50">
+                            <span className="absolute left-1/2 top-full h-5 w-px -translate-x-1/2 bg-brand-900/10" />
+                            <Icon className="h-4 w-4 text-brand-900/75" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-relaxed text-brand-900">{item.title}</p>
+                            <p className="mt-1 text-xs text-brand-900/45">
+                              {formatRelativeActivityTime(item.created_at)}
+                            </p>
+                          </div>
+                          {item.thumbnail_url ? (
+                            <img
+                              src={item.thumbnail_url}
+                              alt=""
+                              className="hidden h-10 w-10 shrink-0 object-cover sm:block"
+                            />
+                          ) : null}
+                        </>
+                      );
+
+                      if (item.href) {
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleActivityClick(item)}
+                            className={`flex w-full items-start gap-3 rounded-none py-3 text-left transition-colors hover:bg-brand-50/60 ${
+                              index < visibleActivityItems.length - 1 ? "border-b border-brand-900/8" : ""
+                            }`}
+                          >
+                            {rowContent}
+                          </button>
+                        );
+                      }
+
                       return (
-                        <button
+                        <div
                           key={item.id}
-                          type="button"
-                          onClick={() => handleActivityClick(item)}
-                          className={`flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-brand-50/60 ${
-                            index < activityItems.length - 1
-                              ? "border-b border-brand-900/8"
-                              : ""
+                          className={`flex items-start gap-3 py-3 ${
+                            index < visibleActivityItems.length - 1 ? "border-b border-brand-900/8" : ""
                           }`}
                         >
                           {rowContent}
-                        </button>
+                        </div>
                       );
-                    }
+                    })}
+                  </div>
+                )}
+              </section>
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`flex items-center gap-4 py-4 ${
-                          index < activityItems.length - 1 ? "border-b border-brand-900/8" : ""
-                        }`}
-                      >
-                        {rowContent}
-                      </div>
-                    );
-                  })}
+              <section className="border border-brand-900/8 bg-card p-5 shadow-sm">
+                <div className="mb-4 flex items-end justify-between gap-4">
+                  <div>
+                    <h2 className="font-serif text-2xl italic">Top Wallpapers</h2>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      Your best-performing designs at a glance.
+                    </p>
+                  </div>
+                  <Link
+                    to="/wallpapers"
+                    className="whitespace-nowrap text-[11px] uppercase tracking-[0.2em] text-accent hover:underline"
+                  >
+                    View All →
+                  </Link>
                 </div>
-              )}
-            </div>
-          </section>
+
+                <div className="mb-4 border border-brand-900/8 bg-brand-50/70 px-4 py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
+                    Insight
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-brand-900/70">
+                    {getTopWallpaperInsight(topWallpapers)}
+                  </p>
+                </div>
+
+                {metricsLoading ? (
+                  <div className="space-y-3">
+                    <TopWallpaperSkeleton />
+                    <TopWallpaperSkeleton />
+                    <TopWallpaperSkeleton />
+                    <TopWallpaperSkeleton />
+                  </div>
+                ) : topWallpapers.length === 0 ? (
+                  <div className="px-2 py-8 text-center">
+                    <p className="font-serif text-xl italic text-brand-900">
+                      No wallpaper performance data yet.
+                    </p>
+                    <p className="mt-2 text-sm text-brand-900/55">
+                      Generate your first AI design to start seeing trends.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartDesign}
+                      className="mt-6 inline-flex items-center gap-2 bg-brand-900 px-5 py-3 text-[11px] uppercase tracking-[0.2em] text-brand-50 transition-colors hover:bg-brand-800"
+                    >
+                      Start New Design
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {visibleTopWallpapers.map((wallpaper, index) => {
+                      const badge = getTopWallpaperBadge(wallpaper, index);
+
+                      return (
+                        <article
+                          key={wallpaper.wallpaper_id}
+                          className="border border-brand-900/8 bg-white/70 p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden bg-brand-100">
+                              <img
+                                src={wallpaper.thumbnail_url}
+                                alt={wallpaper.wallpaper_name}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">
+                                    #{index + 1} · {wallpaper.category}
+                                  </p>
+                                  <h3 className="mt-1 line-clamp-2 text-sm font-medium text-brand-900">
+                                    {wallpaper.wallpaper_name}
+                                  </h3>
+                                </div>
+                                {badge ? (
+                                  <span className="border border-amber-300/70 bg-amber-100/92 px-2 py-1 text-[9px] uppercase tracking-[0.18em] text-amber-950">
+                                    {badge}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-brand-900/55">
+                                <span>{wallpaper.visualization_count} visualizations</span>
+                                <span>{wallpaper.ai_generation_count} AI designs</span>
+                              </div>
+
+                              <p className="mt-2 text-xs text-brand-900/45">
+                                Last used {formatRelativeTimeLabel(wallpaper.last_used_at)}
+                              </p>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWallpaper(wallpaper.wallpaper_id)}
+                                  className="border border-brand-900/15 px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors hover:bg-brand-50"
+                                >
+                                  Open
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleGenerateFromWallpaper(wallpaper.wallpaper_id)}
+                                  className="bg-brand-900 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-brand-50 transition-colors hover:bg-brand-800"
+                                >
+                                  Generate
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </aside>
+          </div>
         </TooltipProvider>
       </div>
     </AppShell>
+  );
+}
+
+function QuickActionCard({
+  icon: Icon,
+  title,
+  description,
+  ariaLabel,
+  badge,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  ariaLabel: string;
+  badge?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={description}
+      className="group inline-flex items-center gap-2.5 border border-brand-900/12 bg-white/80 px-3.5 py-2.5 text-left transition-colors hover:border-accent/35 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <span className="inline-flex h-8 w-8 items-center justify-center border border-brand-900/10 bg-brand-50 text-brand-900">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-brand-900">{title}</span>
+      {badge ? (
+        <span className="border border-amber-300/70 bg-amber-100/92 px-2 py-1 text-[9px] uppercase tracking-[0.16em] text-amber-950">
+          {badge}
+        </span>
+      ) : null}
+      <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-brand-900/35 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-accent group-focus-visible:translate-x-1 group-focus-visible:text-accent" />
+    </button>
   );
 }
 
@@ -915,7 +1077,7 @@ function StatCard({
   note?: string;
 }) {
   return (
-    <div className="bg-card p-8">
+    <div className="border border-brand-900/8 bg-brand-50/50 p-4">
       <div className="flex items-center gap-2">
         <p className="text-[10px] uppercase tracking-[0.2em] text-brand-900/40">{label}</p>
         <Tooltip>
@@ -928,24 +1090,22 @@ function StatCard({
               <CircleHelp className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent className="max-w-48 bg-brand-900 text-brand-50">
-            {tooltip}
-          </TooltipContent>
+          <TooltipContent className="max-w-48 bg-brand-900 text-brand-50">{tooltip}</TooltipContent>
         </Tooltip>
       </div>
-      <p className="font-serif text-5xl mt-4">{value}</p>
-      <p className="mt-3 text-sm text-brand-900/65">{insight}</p>
-      {note ? <p className="mt-2 text-[11px] text-brand-900/45">{note}</p> : null}
+      <p className="mt-3 font-serif text-4xl leading-none text-brand-900">{value}</p>
+      <p className="mt-2 text-sm text-brand-900/65">{insight}</p>
+      {note ? <p className="mt-2 text-[11px] leading-relaxed text-brand-900/45">{note}</p> : null}
     </div>
   );
 }
 
 function StatSkeleton() {
   return (
-    <div className="bg-card p-8">
+    <div className="border border-brand-900/8 bg-brand-50/50 p-4">
       <Skeleton className="h-3 w-20 bg-brand-900/8" />
-      <Skeleton className="mt-4 h-12 w-16 bg-brand-900/10" />
-      <Skeleton className="mt-3 h-4 w-28 bg-brand-900/8" />
+      <Skeleton className="mt-3 h-9 w-16 bg-brand-900/10" />
+      <Skeleton className="mt-2 h-4 w-28 bg-brand-900/8" />
       <Skeleton className="mt-2 h-3 w-36 bg-brand-900/6" />
     </div>
   );
@@ -970,16 +1130,18 @@ function RecentDesignSkeleton() {
 
 function TopWallpaperSkeleton() {
   return (
-    <div className="overflow-hidden border border-brand-900/6 bg-card">
-      <Skeleton className="aspect-[4/5] w-full bg-brand-900/8" />
-      <div className="p-5">
-        <Skeleton className="h-3 w-20 bg-brand-900/8" />
-        <Skeleton className="mt-3 h-8 w-2/3 bg-brand-900/10" />
-        <Skeleton className="mt-6 h-12 w-full bg-brand-900/6" />
-        <Skeleton className="mt-4 h-4 w-28 bg-brand-900/8" />
-        <div className="mt-6 grid gap-3">
-          <Skeleton className="h-11 w-full bg-brand-900/10" />
-          <Skeleton className="h-11 w-full bg-brand-900/6" />
+    <div className="border border-brand-900/8 bg-white/70 p-3">
+      <div className="flex gap-3">
+        <Skeleton className="h-16 w-16 shrink-0 bg-brand-900/8" />
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-3 w-20 bg-brand-900/8" />
+          <Skeleton className="mt-2 h-5 w-3/4 bg-brand-900/10" />
+          <Skeleton className="mt-3 h-3 w-2/3 bg-brand-900/8" />
+          <Skeleton className="mt-2 h-3 w-1/2 bg-brand-900/6" />
+          <div className="mt-3 flex gap-2">
+            <Skeleton className="h-8 w-16 bg-brand-900/10" />
+            <Skeleton className="h-8 w-20 bg-brand-900/6" />
+          </div>
         </div>
       </div>
     </div>
@@ -988,13 +1150,13 @@ function TopWallpaperSkeleton() {
 
 function ActivitySkeleton() {
   return (
-    <div className="flex items-center gap-4 py-4">
-      <Skeleton className="h-10 w-10 bg-brand-900/8" />
+    <div className="flex items-start gap-3 py-3">
+      <Skeleton className="h-9 w-9 bg-brand-900/8" />
       <div className="flex-1">
-        <Skeleton className="h-4 w-3/5 bg-brand-900/8" />
+        <Skeleton className="h-4 w-4/5 bg-brand-900/8" />
         <Skeleton className="mt-2 h-3 w-24 bg-brand-900/6" />
       </div>
-      <Skeleton className="hidden h-12 w-12 bg-brand-900/6 md:block" />
+      <Skeleton className="hidden h-10 w-10 bg-brand-900/6 sm:block" />
     </div>
   );
 }
@@ -1004,15 +1166,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">{label}</span>
       <span className="text-sm font-medium text-right">{value}</span>
-    </div>
-  );
-}
-
-function MetricLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4">
-      <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">{label}</span>
-      <span className="font-serif text-2xl leading-none text-brand-900">{value}</span>
     </div>
   );
 }
@@ -1174,4 +1327,22 @@ function getAssetFormat(url: string) {
   if (extension === "jpg" || extension === "jpeg") return "JPG";
   if (extension === "webp") return "WEBP";
   return "PNG";
+}
+
+function getDisplayName(fullName: string | null | undefined, email: string | null | undefined) {
+  const trimmedName = fullName?.trim();
+  if (trimmedName) {
+    return trimmedName.split(/\s+/)[0] || trimmedName;
+  }
+
+  const localPart = email?.split("@")[0]?.trim();
+  if (localPart) {
+    return localPart
+      .split(/[._-]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  return "there";
 }
