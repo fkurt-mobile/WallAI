@@ -519,7 +519,7 @@ function Dashboard() {
                       : "Loading your wallpaper and visualization totals."}
                   </p>
 
-                  <div className="mt-5 flex flex-wrap gap-3">
+                  <div className="mt-5 flex gap-3 overflow-x-auto pb-2">
                     {quickActions.map(({ key, icon, title, description, ariaLabel, badge, onClick, emphasized }) => (
                       <QuickActionCard
                         key={key}
