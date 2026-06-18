@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { z } from "zod";
 import { AppShell } from "@/components/site/app-shell";
 import { categories, type Wallpaper } from "@/lib/wallpapers/data";
 import { WallpaperModal } from "@/components/site/wallpaper-modal";
@@ -15,7 +16,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const searchSchema = z.object({
+  id: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/wallpapers/")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Wallpapers — Murra" },
@@ -27,6 +33,8 @@ export const Route = createFileRoute("/_authenticated/wallpapers/")({
 
 function WallpaperList() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
   const [cat, setCat] = useState("All");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Wallpaper | null>(null);
@@ -61,6 +69,14 @@ function WallpaperList() {
     image: w.image_url,
     tint: "",
   }));
+
+  useEffect(() => {
+    if (!search.id || wallpapersList.length === 0) return;
+    const selectedWallpaper = wallpapersList.find((wallpaper) => wallpaper.id === search.id);
+    if (selectedWallpaper) {
+      setActive((current) => (current?.id === selectedWallpaper.id ? current : selectedWallpaper));
+    }
+  }, [search.id, wallpapersList]);
 
   const requestDelete = (id: string, imageUrl: string) => {
     const wallpaper = wallpapersList.find((w) => w.id === id) || null;
@@ -119,6 +135,14 @@ function WallpaperList() {
   );
 
   const isLoading = profileLoading || wallpapersLoading;
+
+  const handleWallpaperModalChange = (open: boolean) => {
+    if (open) return;
+    setActive(null);
+    if (search.id) {
+      navigate({ to: "/wallpapers", search: {} });
+    }
+  };
 
   return (
     <AppShell>
@@ -218,7 +242,7 @@ function WallpaperList() {
       <WallpaperModal
         wallpaper={active}
         open={!!active}
-        onOpenChange={(o) => !o && setActive(null)}
+        onOpenChange={handleWallpaperModalChange}
         onDelete={requestDelete}
       />
       <DeleteWallpaperDialog

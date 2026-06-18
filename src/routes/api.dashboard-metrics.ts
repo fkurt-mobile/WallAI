@@ -16,6 +16,7 @@ interface DashboardMetrics {
   successRate: number | null;
   mostUsedWallpaper: string | null;
   mostUsedWallpaperCount: number;
+  topWallpapers: TopWallpaperMetric[];
   recentWallpapers: Array<{
     id: string;
     title: string;
@@ -48,6 +49,43 @@ interface RecentDesignRow {
   custom_prompt?: string | null;
   created_at: string;
   wallpapers?: { title?: string | null } | { title?: string | null }[] | null;
+}
+
+interface TopWallpaperMetric {
+  wallpaper_id: string;
+  wallpaper_name: string;
+  wallpaper_code: string | null;
+  thumbnail_url: string;
+  category: string;
+  visualization_count: number;
+  ai_generation_count: number;
+  last_used_at: string | null;
+}
+
+interface TopWallpaperRpcRow {
+  wallpaper_id: string;
+  wallpaper_name: string;
+  wallpaper_code: string | null;
+  thumbnail_url: string;
+  category: string;
+  visualization_count: number | string;
+  ai_generation_count: number | string;
+  last_used_at: string | null;
+}
+
+interface TopWallpaperJoinRow {
+  id?: string | null;
+  title?: string | null;
+  product_code?: string | null;
+  image_url?: string | null;
+  category?: string | null;
+}
+
+interface TopWallpaperFallbackRow {
+  wallpaper_id: string | null;
+  source_type: string | null;
+  created_at: string;
+  wallpapers?: TopWallpaperJoinRow | TopWallpaperJoinRow[] | null;
 }
 
 interface VisualizationShareClient {
@@ -124,6 +162,16 @@ interface AiGenerationStatusClient {
   };
 }
 
+interface TopWallpapersRpcClient {
+  rpc: (
+    fn: "get_dashboard_top_wallpapers",
+    args: { p_user_id: string; p_limit: number },
+  ) => Promise<{
+    data: TopWallpaperRpcRow[] | null;
+    error: { message?: string } | null;
+  }>;
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -149,6 +197,23 @@ function normalizeWallpaperTitle(
   if (!wallpapers) return null;
   if (Array.isArray(wallpapers)) return wallpapers[0]?.title ?? null;
   return wallpapers.title ?? null;
+}
+
+function normalizeWallpaperJoin(
+  wallpapers: TopWallpaperJoinRow | TopWallpaperJoinRow[] | null | undefined,
+) {
+  if (!wallpapers) return null;
+  if (Array.isArray(wallpapers)) return wallpapers[0] ?? null;
+  return wallpapers;
+}
+
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 export const Route = createFileRoute("/api/dashboard-metrics")({
@@ -186,6 +251,94 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
 
           const monthStartIso = getMonthStartIso();
           const todayStartIso = getTodayStartIso();
+
+          const fetchTopWallpapers = async (): Promise<TopWallpaperMetric[]> => {
+            try {
+              const rpcClient = supabase as unknown as TopWallpapersRpcClient;
+              const { data, error } = await rpcClient.rpc("get_dashboard_top_wallpapers", {
+                p_user_id: user.id,
+                p_limit: 5,
+              });
+
+              if (error) throw error;
+
+              return (data || []).map((row) => ({
+                wallpaper_id: row.wallpaper_id,
+                wallpaper_name: row.wallpaper_name,
+                wallpaper_code: row.wallpaper_code,
+                thumbnail_url: row.thumbnail_url,
+                category: row.category,
+                visualization_count: toNumber(row.visualization_count),
+                ai_generation_count: toNumber(row.ai_generation_count),
+                last_used_at: row.last_used_at,
+              }));
+            } catch (error) {
+              console.warn(
+                "[Dashboard Metrics] Falling back to non-RPC top wallpapers query:",
+                error,
+              );
+
+              const { data, error: fallbackError } = await supabase
+                .from("visualizations")
+                .select(
+                  "wallpaper_id, source_type, created_at, wallpapers(id, title, product_code, image_url, category)",
+                )
+                .eq("user_id", user.id)
+                .not("wallpaper_id", "is", null)
+                .order("created_at", { ascending: false });
+
+              if (fallbackError) throw fallbackError;
+
+              const grouped = new Map<string, TopWallpaperMetric>();
+              for (const row of (data || []) as TopWallpaperFallbackRow[]) {
+                if (!row.wallpaper_id) continue;
+                const wallpaper = normalizeWallpaperJoin(row.wallpapers);
+                if (!wallpaper?.id || !wallpaper.title || !wallpaper.image_url || !wallpaper.category) {
+                  continue;
+                }
+
+                const existing = grouped.get(row.wallpaper_id);
+                if (existing) {
+                  existing.visualization_count += 1;
+                  if (row.source_type === "ai_generated") {
+                    existing.ai_generation_count += 1;
+                  }
+                  if (
+                    row.created_at &&
+                    (!existing.last_used_at ||
+                      new Date(row.created_at).getTime() > new Date(existing.last_used_at).getTime())
+                  ) {
+                    existing.last_used_at = row.created_at;
+                  }
+                  continue;
+                }
+
+                grouped.set(row.wallpaper_id, {
+                  wallpaper_id: row.wallpaper_id,
+                  wallpaper_name: wallpaper.title,
+                  wallpaper_code: wallpaper.product_code ?? null,
+                  thumbnail_url: wallpaper.image_url,
+                  category: wallpaper.category,
+                  visualization_count: 1,
+                  ai_generation_count: row.source_type === "ai_generated" ? 1 : 0,
+                  last_used_at: row.created_at,
+                });
+              }
+
+              return Array.from(grouped.values())
+                .sort((a, b) => {
+                  if (b.visualization_count !== a.visualization_count) {
+                    return b.visualization_count - a.visualization_count;
+                  }
+
+                  return (
+                    new Date(b.last_used_at || 0).getTime() -
+                    new Date(a.last_used_at || 0).getTime()
+                  );
+                })
+                .slice(0, 5);
+            }
+          };
 
           const fetchRecentDesigns = async (): Promise<{
             data: RecentDesignRow[] | null;
@@ -232,6 +385,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             wallpapersMonthResult,
             visualizationsTotalResult,
             mostUsedWallpaperResult,
+            topWallpapersResult,
             recentWallpapersResult,
             recentDesignsResult,
           ] = await Promise.all([
@@ -252,6 +406,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
               .from("visualizations")
               .select("wallpaper_id, wallpapers(title)")
               .eq("user_id", user.id),
+            fetchTopWallpapers(),
             supabase
               .from("wallpapers")
               .select("id, title, product_code, image_url, created_at")
@@ -359,6 +514,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             successRate,
             mostUsedWallpaper,
             mostUsedWallpaperCount,
+            topWallpapers: topWallpapersResult,
             recentWallpapers: recentWallpapersResult.data || [],
             recentDesigns:
               recentDesignsResult.data?.map((design) => ({

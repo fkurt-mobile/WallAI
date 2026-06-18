@@ -59,6 +59,17 @@ interface RecentVisualizationRecord {
   } | null;
 }
 
+interface TopWallpaperRecord {
+  wallpaper_id: string;
+  wallpaper_name: string;
+  wallpaper_code: string | null;
+  thumbnail_url: string;
+  category: string;
+  visualization_count: number;
+  ai_generation_count: number;
+  last_used_at: string | null;
+}
+
 interface DashboardMetrics {
   totalWallpapers: number;
   newWallpapersMonth: number;
@@ -69,6 +80,7 @@ interface DashboardMetrics {
   successRate: number | null;
   mostUsedWallpaper: string | null;
   mostUsedWallpaperCount: number;
+  topWallpapers: TopWallpaperRecord[];
   recentWallpapers: RecentWallpaperRecord[];
   recentDesigns: RecentVisualizationRecord[];
 }
@@ -77,6 +89,7 @@ function Dashboard() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const navigate = useNavigate();
   const recentDesignsTracked = useRef(false);
+  const topWallpapersTracked = useRef(false);
 
   const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useQuery({
     queryKey: ["dashboard-metrics", profile?.id],
@@ -116,6 +129,7 @@ function Dashboard() {
 
   const recentWallpapers = metrics?.recentWallpapers || [];
   const recentDesigns = metrics?.recentDesigns || [];
+  const topWallpapers = metrics?.topWallpapers || [];
   const latestViz = recentDesigns[0] || null;
   const isLoading = profileLoading || metricsLoading;
   const showSuccessRateCard = metrics?.successRate !== null;
@@ -143,6 +157,12 @@ function Dashboard() {
     recentDesignsTracked.current = true;
     trackEvent("dashboard_recent_designs_loaded");
   }, [metricsLoading, profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id || !metrics || metricsLoading || topWallpapersTracked.current) return;
+    topWallpapersTracked.current = true;
+    trackEvent("dashboard_top_wallpapers_loaded");
+  }, [metrics, metricsLoading, profile?.id]);
 
   const handleStartDesign = () => {
     trackEvent("dashboard_start_design_clicked");
@@ -198,6 +218,22 @@ function Dashboard() {
     } catch {
       toast.error("Unable to share this design right now.");
     }
+  };
+
+  const handleOpenWallpaper = (wallpaperId: string) => {
+    trackEvent("dashboard_top_wallpaper_clicked");
+    navigate({
+      to: "/wallpapers",
+      search: { id: wallpaperId },
+    });
+  };
+
+  const handleGenerateFromWallpaper = (wallpaperId: string) => {
+    trackEvent("dashboard_top_wallpaper_generate_clicked");
+    navigate({
+      to: "/tools/wallpaper-visualizer",
+      search: { wallpaper: wallpaperId },
+    });
   };
 
   return (
@@ -494,6 +530,141 @@ function Dashboard() {
             )}
           </section>
 
+          <section className="mb-16">
+            <div className="flex items-end justify-between gap-6 mb-6">
+              <div>
+                <h2 className="font-serif text-3xl italic">Top Wallpapers</h2>
+                <p className="text-sm text-brand-900/55 mt-2">
+                  Your most-used wallpapers across AI-generated designs.
+                </p>
+              </div>
+              <Link
+                to="/wallpapers"
+                className="text-[11px] uppercase tracking-[0.2em] text-accent hover:underline whitespace-nowrap"
+              >
+                View Collection →
+              </Link>
+            </div>
+
+            <div className="mb-6 border border-brand-900/8 bg-card px-6 py-5 shadow-sm">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
+                Insight
+              </p>
+              <p className="mt-3 font-serif text-2xl italic leading-tight text-brand-900">
+                {getTopWallpaperInsight(topWallpapers)}
+              </p>
+            </div>
+
+            {metricsLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                <TopWallpaperSkeleton />
+                <TopWallpaperSkeleton />
+                <TopWallpaperSkeleton />
+                <TopWallpaperSkeleton />
+                <TopWallpaperSkeleton />
+              </div>
+            ) : topWallpapers.length === 0 ? (
+              <div className="border border-dashed border-brand-900/15 bg-card py-16 px-8 text-center">
+                <p className="text-brand-900 font-serif text-2xl italic">
+                  No wallpaper performance data yet.
+                </p>
+                <p className="text-brand-900/55 mt-3 mb-8">
+                  Generate your first AI design to start seeing trends.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStartDesign}
+                  className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
+                >
+                  Start New Design
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                {topWallpapers.map((wallpaper, index) => {
+                  const badge = getTopWallpaperBadge(wallpaper, index);
+
+                  return (
+                    <article
+                      key={wallpaper.wallpaper_id}
+                      className="group overflow-hidden border border-brand-900/8 bg-card shadow-[0_20px_55px_-36px_rgba(15,23,42,0.38)]"
+                    >
+                      <div className="relative aspect-[4/5] overflow-hidden bg-brand-100">
+                        <img
+                          src={wallpaper.thumbnail_url}
+                          alt={wallpaper.wallpaper_name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-brand-950/45 via-transparent to-transparent" />
+                        <div className="absolute left-4 top-4 flex items-center gap-2">
+                          <span className="bg-brand-50/92 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-brand-900">
+                            #{index + 1}
+                          </span>
+                          {badge ? (
+                            <span className="border border-amber-300/70 bg-amber-100/92 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-950">
+                              {badge}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.22em] text-accent font-medium">
+                              {wallpaper.category}
+                            </p>
+                            <h3 className="mt-2 font-serif text-2xl italic leading-tight text-brand-900">
+                              {wallpaper.wallpaper_name}
+                            </h3>
+                          </div>
+                          {wallpaper.wallpaper_code ? (
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">
+                              {wallpaper.wallpaper_code}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-5 space-y-3 border-t border-brand-900/8 pt-4">
+                          <MetricLine
+                            label="Visualizations"
+                            value={String(wallpaper.visualization_count)}
+                          />
+                          <MetricLine
+                            label="AI Designs"
+                            value={String(wallpaper.ai_generation_count)}
+                          />
+                        </div>
+
+                        <p className="mt-4 text-sm text-brand-900/55">
+                          Last used {formatRelativeTimeLabel(wallpaper.last_used_at)}
+                        </p>
+
+                        <div className="mt-6 flex flex-col gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWallpaper(wallpaper.wallpaper_id)}
+                            className="w-full bg-brand-900 text-brand-50 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
+                          >
+                            Open Wallpaper
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateFromWallpaper(wallpaper.wallpaper_id)}
+                            className="w-full border border-brand-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-50 transition-colors cursor-pointer"
+                          >
+                            Generate Design
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
           <section>
             <div className="flex items-end justify-between gap-6 mb-6">
               <div>
@@ -613,11 +784,38 @@ function RecentDesignSkeleton() {
   );
 }
 
+function TopWallpaperSkeleton() {
+  return (
+    <div className="overflow-hidden border border-brand-900/6 bg-card">
+      <Skeleton className="aspect-[4/5] w-full bg-brand-900/8" />
+      <div className="p-5">
+        <Skeleton className="h-3 w-20 bg-brand-900/8" />
+        <Skeleton className="mt-3 h-8 w-2/3 bg-brand-900/10" />
+        <Skeleton className="mt-6 h-12 w-full bg-brand-900/6" />
+        <Skeleton className="mt-4 h-4 w-28 bg-brand-900/8" />
+        <div className="mt-6 grid gap-3">
+          <Skeleton className="h-11 w-full bg-brand-900/10" />
+          <Skeleton className="h-11 w-full bg-brand-900/6" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">{label}</span>
       <span className="text-sm font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+function MetricLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-[10px] uppercase tracking-[0.18em] text-brand-900/40">{label}</span>
+      <span className="font-serif text-2xl leading-none text-brand-900">{value}</span>
     </div>
   );
 }
@@ -688,6 +886,50 @@ function formatCreatedLabel(value: string | null | undefined): string {
   if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
   if (diffDays === 1) return "yesterday";
   return `${diffDays} days ago`;
+}
+
+function formatRelativeTimeLabel(value: string | null | undefined): string {
+  const date = parseDatabaseDate(value);
+  if (!date) return "recently";
+
+  const diffMs = Math.max(0, Date.now() - date.getTime());
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffDays === 1) return "yesterday";
+  return `${diffDays} days ago`;
+}
+
+function getTopWallpaperBadge(
+  wallpaper: TopWallpaperRecord,
+  index: number,
+): "BEST PERFORMER" | "TRENDING" | "ACTIVE" | null {
+  if (index === 0) return "BEST PERFORMER";
+
+  const lastUsed = parseDatabaseDate(wallpaper.last_used_at);
+  if (!lastUsed) return null;
+
+  const diffHours = Math.max(0, Date.now() - lastUsed.getTime()) / 3600000;
+  if (wallpaper.ai_generation_count >= 2 && diffHours <= 168) return "TRENDING";
+  if (diffHours <= 48) return "ACTIVE";
+  return null;
+}
+
+function getTopWallpaperInsight(topWallpapers: TopWallpaperRecord[]): string {
+  if (topWallpapers.length === 0) {
+    return "Generate your first AI design to start seeing wallpaper trends.";
+  }
+
+  const leader = topWallpapers[0];
+  if (leader.ai_generation_count > 0) {
+    return `${leader.wallpaper_name} leads with ${leader.visualization_count} visualizations and ${leader.ai_generation_count} AI designs.`;
+  }
+
+  return `${leader.wallpaper_name} leads your collection with ${leader.visualization_count} visualization${leader.visualization_count === 1 ? "" : "s"}.`;
 }
 
 function getRecentDesignBadge(value: string | null | undefined): string | null {
