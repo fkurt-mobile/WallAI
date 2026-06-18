@@ -5,12 +5,15 @@ export interface ProfileWithCompany {
   company_id: string | null;
   full_name: string | null;
   role: string;
+  onboarding_completed: boolean;
+  onboarding_hidden: boolean;
+  onboarding_step: number;
   created_at: string;
   updated_at: string;
   email?: string;
   companies: {
     id: string;
-    name: string;
+    name: string | null;
     slug: string;
     subscription_plan: string;
     created_at: string;
@@ -46,7 +49,7 @@ export const ProfileService = {
     const { data: profile, error } = await supabase
       .from("profiles")
       .select(
-        "id, company_id, full_name, role, created_at, updated_at, companies(id, name, slug, subscription_plan, created_at, updated_at)",
+        "id, company_id, full_name, role, onboarding_completed, onboarding_hidden, onboarding_step, created_at, updated_at, companies(id, name, slug, subscription_plan, created_at, updated_at)",
       )
       .eq("id", user.id)
       .single();

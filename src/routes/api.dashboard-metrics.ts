@@ -88,7 +88,7 @@ interface TopWallpaperFallbackRow {
   wallpapers?: TopWallpaperJoinRow | TopWallpaperJoinRow[] | null;
 }
 
-interface VisualizationShareClient {
+interface VisualizationShareCountClient {
   from: (table: "visualizations") => {
     select: (
       columns: string,
@@ -103,6 +103,15 @@ interface VisualizationShareClient {
           error: { message?: string } | null;
         }>;
       };
+    };
+  };
+}
+
+interface VisualizationShareDataClient {
+  from: (table: "visualizations") => {
+    select: (
+      columns: string,
+    ) => {
       eq: (
         column: string,
         value: string,
@@ -117,36 +126,26 @@ interface VisualizationShareClient {
   };
 }
 
+interface AiCountResult {
+  count: number | null;
+  error: { message?: string } | null;
+}
+
+type AiEqResult = Promise<AiCountResult> & {
+  gte?: (column: string, value: string) => Promise<AiCountResult>;
+};
+
 interface AiGenerationsMetricsClient {
   from: (table: "ai_generations") => {
     select: (
       columns: string,
       options?: { count?: "exact"; head?: boolean },
     ) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        gte?: (
-          column: string,
-          value: string,
-        ) => Promise<{
-          count: number | null;
-          error: { message?: string } | null;
-        }>;
-      };
-      gte?: (
-        column: string,
-        value: string,
-      ) => Promise<{
-        count: number | null;
-        error: { message?: string } | null;
-      }>;
-      then?: never;
-      order?: never;
+      eq: (column: string, value: string) => AiEqResult;
     };
   };
 }
+
 
 interface AiGenerationStatusClient {
   from: (table: "ai_generations") => {
@@ -402,7 +401,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
               .from("visualizations")
               .select("*", { count: "exact", head: true })
               .eq("user_id", user.id),
-            (supabase as unknown as VisualizationShareClient)
+            (supabase as unknown as VisualizationShareDataClient)
               .from("visualizations")
               .select("wallpaper_id, wallpapers(title)")
               .eq("user_id", user.id),
@@ -425,7 +424,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
 
           let sharedVisualizations = 0;
           try {
-            const shareClient = supabase as unknown as VisualizationShareClient;
+            const shareClient = supabase as unknown as VisualizationShareCountClient;
             const { count, error } = await shareClient
               .from("visualizations")
               .select("*", { count: "exact", head: true })
@@ -519,6 +518,7 @@ export const Route = createFileRoute("/api/dashboard-metrics")({
             recentDesigns:
               recentDesignsResult.data?.map((design) => ({
                 ...design,
+                custom_prompt: design.custom_prompt ?? null,
                 wallpapers: design.wallpapers
                   ? { title: normalizeWallpaperTitle(design.wallpapers) }
                   : null,

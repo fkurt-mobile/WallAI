@@ -9,7 +9,7 @@ export type Database = {
       companies: {
         Row: {
           id: string;
-          name: string;
+          name: string | null;
           slug: string;
           subscription_plan: string;
           created_at: string;
@@ -17,7 +17,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          name: string;
+          name?: string | null;
           slug: string;
           subscription_plan?: string;
           created_at?: string;
@@ -25,7 +25,7 @@ export type Database = {
         };
         Update: {
           id?: string;
-          name?: string;
+          name?: string | null;
           slug?: string;
           subscription_plan?: string;
           created_at?: string;
@@ -39,6 +39,9 @@ export type Database = {
           company_id: string | null;
           full_name: string | null;
           role: string;
+          onboarding_completed: boolean;
+          onboarding_hidden: boolean;
+          onboarding_step: number;
           created_at: string;
           updated_at: string;
         };
@@ -47,6 +50,9 @@ export type Database = {
           company_id?: string | null;
           full_name?: string | null;
           role?: string;
+          onboarding_completed?: boolean;
+          onboarding_hidden?: boolean;
+          onboarding_step?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -55,6 +61,9 @@ export type Database = {
           company_id?: string | null;
           full_name?: string | null;
           role?: string;
+          onboarding_completed?: boolean;
+          onboarding_hidden?: boolean;
+          onboarding_step?: number;
           created_at?: string;
           updated_at?: string;
         };

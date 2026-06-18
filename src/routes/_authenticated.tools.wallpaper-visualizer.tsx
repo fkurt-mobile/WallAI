@@ -33,6 +33,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { logActivityEvent } from "@/lib/activity-client";
+import { OnboardingService } from "@/lib/onboarding";
 
 const searchSchema = z.object({
   wallpaper: z.string().optional(),
@@ -331,6 +332,9 @@ function AiRoomDesigner() {
         queryKey: ["wallpaper-visualizations", design.wallpaper.id],
       });
       queryClient.invalidateQueries({ queryKey: ["dashboard-activity"] });
+      // Invalidate dashboard metrics so step 3 (Generate First AI Design) marks done
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      window.dispatchEvent(new CustomEvent("onboarding_progress_updated"));
       toast.success("Your AI room designs are ready!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Generation failed. Please try again.";

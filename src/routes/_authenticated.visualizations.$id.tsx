@@ -2,9 +2,10 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatShortDate } from "@/lib/dates";
 import { logActivityEvent } from "@/lib/activity-client";
+import { OnboardingService } from "@/lib/onboarding";
 
 // Event tracking utility
 const trackEvent = (eventName: string) => {
@@ -58,6 +59,14 @@ function VisualizationDetail() {
   const { visualization } = Route.useLoaderData();
   const viz = visualization;
   const [copied, setCopied] = useState(false);
+
+  // ── Mark step 4 (View a Visualization) complete as soon as the page loads ──
+  useEffect(() => {
+    OnboardingService.markVisualizationViewed();
+    // Notify any mounted checklist to re-evaluate progress
+    window.dispatchEvent(new CustomEvent("onboarding_progress_updated"));
+  }, []);
+
   const generateSimilarSearch = viz.wallpaper_id
     ? {
         wallpaper: viz.wallpaper_id,
@@ -83,6 +92,9 @@ function VisualizationDetail() {
           thumbnail_url: viz.result_image_url,
         },
       });
+      // Mark step 5 (Share a Visualization) complete
+      OnboardingService.markVisualizationShared();
+      window.dispatchEvent(new CustomEvent("onboarding_progress_updated"));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { Check, Facebook, Instagram, Link as LinkIcon, Mail, MessageCircle } from "lucide-react";
 import { logActivityEvent } from "@/lib/activity-client";
+import { OnboardingService } from "@/lib/onboarding";
 
 export const Route = createFileRoute("/_authenticated/visualizations")({
   head: () => ({
@@ -79,6 +80,10 @@ function VisualizationsPage() {
   const companyId = profile?.company_id;
 
   const recordShare = async (viz: VisualizationCard) => {
+    // Mark onboarding step 5 (Share a Visualization)
+    OnboardingService.markVisualizationShared();
+    window.dispatchEvent(new CustomEvent("onboarding_progress_updated"));
+
     await logActivityEvent({
       eventType: "visualization_shared",
       entityType: viz.activityEntityType || "visualization",
@@ -105,6 +110,13 @@ function VisualizationsPage() {
     } catch {
       window.open(viz.image, "_blank");
     }
+  };
+
+  // Mark step 4 (View a Visualization) whenever the preview modal opens
+  const handleOpenModal = (index: number) => {
+    OnboardingService.markVisualizationViewed();
+    window.dispatchEvent(new CustomEvent("onboarding_progress_updated"));
+    setActiveIndex(index);
   };
 
   // Query real visualizations from Supabase
@@ -258,7 +270,7 @@ function VisualizationsPage() {
                     <button
                       onClick={() => {
                         setShareOpenId(null);
-                        setActiveIndex(index);
+                        handleOpenModal(index);
                       }}
                       className="flex-1 bg-brand-900 text-brand-50 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
                     >

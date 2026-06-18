@@ -27,12 +27,23 @@ interface NavItem {
   group?: string;
 }
 
-function getCompanyDisplayName(companies: unknown, fallback: string) {
+const DUMMY_COMPANY_NAMES = new Set([
+  "Test Company",
+  "New Company",
+  "Demo Studio",
+  "Default Organization",
+  "Heim Studio",
+]);
+
+function getCompanyDisplayName(companies: unknown, isLoading: boolean): { name: string; isSetup: boolean } {
+  if (isLoading) return { name: "Loading...", isSetup: false };
   if (companies && typeof companies === "object" && "name" in companies) {
     const name = (companies as { name?: unknown }).name;
-    if (typeof name === "string" && name.trim()) return name;
+    if (typeof name === "string" && name.trim() && !DUMMY_COMPANY_NAMES.has(name.trim())) {
+      return { name: name.trim(), isSetup: false };
+    }
   }
-  return fallback;
+  return { name: "Set Up Studio", isSetup: true };
 }
 
 const NAV: NavItem[] = [
@@ -121,9 +132,9 @@ function MobileDrawer({
 
   const displayName =
     profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
-  const displayCompany = getCompanyDisplayName(
+  const { name: displayCompany, isSetup: companyIsSetup } = getCompanyDisplayName(
     profile?.companies,
-    isLoading ? "Loading..." : "Company Account",
+    isLoading,
   );
   const avatarLetter = (
     profile?.full_name?.trim()
@@ -178,7 +189,8 @@ function MobileDrawer({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">{displayName}</p>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/45 truncate">
+              <p className={`text-[10px] uppercase tracking-[0.18em] truncate ${companyIsSetup ? "text-accent font-medium" : "text-brand-900/45"}`}>
+                {companyIsSetup && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />}
                 {displayCompany}
               </p>
             </div>
@@ -228,9 +240,9 @@ function Sidebar() {
 
   const displayName =
     profile?.full_name?.trim() || profile?.email || (isLoading ? "Loading..." : "User");
-  const displayCompany = getCompanyDisplayName(
+  const { name: displayCompany, isSetup: companyIsSetup } = getCompanyDisplayName(
     profile?.companies,
-    isLoading ? "Loading..." : "Company Account",
+    isLoading,
   );
   const avatarLetter = (
     profile?.full_name?.trim()
@@ -270,7 +282,8 @@ function Sidebar() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{displayName}</p>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-brand-900/45 truncate">
+            <p className={`text-[10px] uppercase tracking-[0.18em] truncate ${companyIsSetup ? "text-accent font-medium" : "text-brand-900/45"}`}>
+              {companyIsSetup && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />}
               {displayCompany}
             </p>
           </div>
