@@ -184,8 +184,12 @@ function MobileDrawer({
             to="/profile"
             className="flex items-center gap-3 px-3 py-3 rounded-md hover:bg-brand-900/5"
           >
-            <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0">
-              {avatarLetter}
+            <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0 overflow-hidden">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                avatarLetter
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">{displayName}</p>
@@ -277,8 +281,12 @@ function Sidebar() {
             (pathname.startsWith("/profile") ? "bg-brand-900/5" : "hover:bg-brand-900/5")
           }
         >
-          <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0">
-            {avatarLetter}
+          <div className="size-9 rounded-full bg-gilded text-brand-50 grid place-items-center font-serif text-base shrink-0 overflow-hidden">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              avatarLetter
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{displayName}</p>
