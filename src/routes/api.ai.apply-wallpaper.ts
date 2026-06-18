@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { createActivityEvent } from "@/lib/activity-server";
 import { generateWallpaperMockup } from "@/services/grokService";
 import { Buffer } from "buffer";
 import fs from "fs";
@@ -374,6 +375,22 @@ export const Route = createFileRoute("/api/ai/apply-wallpaper")({
 
           // 11. Return visualization record
           console.log("[API Apply Wallpaper] Visualization process complete. Returning record ID:", visualization.id);
+
+          await createActivityEvent(supabase, {
+            workspaceId: companyId,
+            userId: user.id,
+            eventType: "visualization_created",
+            entityType: "visualization",
+            entityId: visualization.id,
+            metadata: {
+              visualization_id: visualization.id,
+              wallpaper_id: wallpaper.id,
+              wallpaper_name: wallpaper.title,
+              room_type: mockupRoom.category || "Room",
+              thumbnail_url: resultImageUrl,
+              variation_count: 1,
+            },
+          });
           
           const debugData = isDebug ? {
             wallpaper_url: wallpaper.image_url,

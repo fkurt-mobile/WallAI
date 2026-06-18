@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { Buffer } from "buffer";
+import { createActivityEvent } from "@/lib/activity-server";
 
 // Shim global WebSocket to prevent Supabase client initialization crash on Node < 22
 if (typeof globalThis.WebSocket === "undefined") {
@@ -248,6 +249,22 @@ export const Route = createFileRoute("/api/ai/apply-wallpaper-to-uploaded-room")
             "[apply-wallpaper-to-uploaded-room] Complete. Visualization ID:",
             visualization.id
           );
+
+          await createActivityEvent(supabase, {
+            workspaceId: companyId,
+            userId: user.id,
+            eventType: "visualization_created",
+            entityType: "visualization",
+            entityId: visualization.id,
+            metadata: {
+              visualization_id: visualization.id,
+              wallpaper_id: wallpaper.id,
+              wallpaper_name: wallpaper.title,
+              room_type: "Uploaded Room",
+              thumbnail_url: resultImageUrl,
+              variation_count: 1,
+            },
+          });
 
           return new Response(
             JSON.stringify({

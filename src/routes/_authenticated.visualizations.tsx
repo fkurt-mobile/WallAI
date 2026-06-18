@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { Check, Facebook, Instagram, Link as LinkIcon, Mail, MessageCircle } from "lucide-react";
+import { logActivityEvent } from "@/lib/activity-client";
 
 export const Route = createFileRoute("/_authenticated/visualizations")({
   head: () => ({
@@ -66,6 +67,8 @@ type VisualizationCard = VizPreview & {
   wallpaperId?: string | null;
   wallpaperTitle: string;
   date: string;
+  activityEntityId?: string | null;
+  activityEntityType?: "visualization" | "ai_generation";
 };
 
 function VisualizationsPage() {
@@ -75,9 +78,28 @@ function VisualizationsPage() {
   const { data: profile } = useProfile();
   const companyId = profile?.company_id;
 
+  const recordShare = async (viz: VisualizationCard) => {
+    await logActivityEvent({
+      eventType: "visualization_shared",
+      entityType: viz.activityEntityType || "visualization",
+      entityId: viz.activityEntityId || viz.id,
+      metadata: {
+        visualization_id:
+          (viz.activityEntityType || "visualization") === "visualization"
+            ? viz.activityEntityId || viz.id
+            : null,
+        wallpaper_id: viz.wallpaperId || null,
+        wallpaper_name: viz.wallpaperTitle || null,
+        room_type: viz.room || "Visualization",
+        thumbnail_url: viz.image,
+      },
+    });
+  };
+
   const copyShareLink = async (viz: VisualizationCard) => {
     try {
       await navigator.clipboard.writeText(viz.image);
+      await recordShare(viz);
       setCopiedId(viz.id);
       window.setTimeout(() => setCopiedId(null), 1600);
     } catch {
@@ -102,6 +124,8 @@ function VisualizationsPage() {
         id: v.id,
         wallpaperId: v.wallpaper_id,
         wallpaperTitle: v.wallpapers?.title || "Deleted Wallpaper",
+        activityEntityId: v.id,
+        activityEntityType: "visualization",
         room: v.room_type || "Room",
         style: v.style || null,
         mood: v.mood || null,
@@ -142,6 +166,8 @@ function VisualizationsPage() {
                     id: `${generation.id}-${index}`,
                     wallpaperId: generation.wallpaper_id,
                     wallpaperTitle: "AI Room Design",
+                    activityEntityId: generation.id,
+                    activityEntityType: "ai_generation",
                     room: generation.room_type || "Room",
                     style: generation.style || null,
                     mood: generation.mood || null,
@@ -250,6 +276,7 @@ function VisualizationsPage() {
                         viz={v}
                         copied={copiedId === v.id}
                         onCopy={() => copyShareLink(v)}
+                        onShare={() => void recordShare(v)}
                         onClose={() => setShareOpenId(null)}
                       />
                     )}
@@ -284,11 +311,13 @@ function VisualizationSharePopover({
   viz,
   copied,
   onCopy,
+  onShare,
   onClose,
 }: {
   viz: VisualizationCard;
   copied: boolean;
   onCopy: () => void;
+  onShare: () => void;
   onClose: () => void;
 }) {
   const options = [
@@ -331,7 +360,10 @@ function VisualizationSharePopover({
               href={option.href}
               target="_blank"
               rel="noreferrer"
-              onClick={onClose}
+              onClick={() => {
+                onShare();
+                onClose();
+              }}
               className="flex items-center gap-3 px-3 py-2.5 text-xs uppercase tracking-[0.16em] text-brand-900/65 hover:bg-brand-50 hover:text-brand-900 transition-colors"
             >
               <Icon className="size-4 text-brand-900/50" />

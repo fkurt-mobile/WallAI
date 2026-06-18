@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { logActivityEvent } from "@/lib/activity-client";
 
 const searchSchema = z.object({
   id: z.string().optional(),
@@ -116,7 +117,7 @@ function AddWallpaper() {
         const fileExt = imgFile.name.split(".").pop();
         const fileName = `${companyId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("wallpaper-images")
           .upload(fileName, imgFile, {
             upsert: true,
@@ -148,19 +149,43 @@ function AddWallpaper() {
           .eq("id", id);
 
         if (dbError) throw dbError;
+        await logActivityEvent({
+          eventType: "wallpaper_updated",
+          entityType: "wallpaper",
+          entityId: id,
+          metadata: {
+            wallpaper_id: id,
+            wallpaper_name: title.trim(),
+            thumbnail_url: imageUrl,
+          },
+        });
         toast.success("Wallpaper updated successfully");
       } else {
         // Create mode
-        const { error: dbError } = await supabase.from("wallpapers").insert({
-          company_id: companyId,
-          user_id: profile.id,
-          product_code: productCode.trim(),
-          title: title.trim(),
-          category: category.trim(),
-          image_url: imageUrl,
-        });
+        const { data: insertedWallpaper, error: dbError } = await supabase
+          .from("wallpapers")
+          .insert({
+            company_id: companyId,
+            user_id: profile.id,
+            product_code: productCode.trim(),
+            title: title.trim(),
+            category: category.trim(),
+            image_url: imageUrl,
+          })
+          .select("id")
+          .single();
 
         if (dbError) throw dbError;
+        await logActivityEvent({
+          eventType: "wallpaper_uploaded",
+          entityType: "wallpaper",
+          entityId: insertedWallpaper?.id || null,
+          metadata: {
+            wallpaper_id: insertedWallpaper?.id || null,
+            wallpaper_name: title.trim(),
+            thumbnail_url: imageUrl,
+          },
+        });
         toast.success("Wallpaper created successfully");
       }
 
@@ -169,6 +194,7 @@ function AddWallpaper() {
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-activity"] });
 
       navigate({ to: "/wallpapers" });
     } catch (err: any) {

@@ -49,3 +49,22 @@ export function formatRelativeGeneratedTime(value: string | null | undefined): s
   }
   return `Generated ${diffDays} days ago`;
 }
+
+export function formatRelativeActivityTime(value: string | null | undefined): string {
+  const date = parseDatabaseDate(value);
+
+  if (!date) return "Recently";
+
+  const diffMs = Math.max(0, Date.now() - date.getTime());
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  return `${diffWeeks} week${diffWeeks === 1 ? "" : "s"} ago`;
+}

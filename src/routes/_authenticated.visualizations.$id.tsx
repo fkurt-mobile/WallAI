@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { formatShortDate } from "@/lib/dates";
+import { logActivityEvent } from "@/lib/activity-client";
 
 // Event tracking utility
 const trackEvent = (eventName: string) => {
@@ -70,6 +71,18 @@ function VisualizationDetail() {
   const copyShareLink = async () => {
     try {
       await navigator.clipboard.writeText(viz.result_image_url);
+      await logActivityEvent({
+        eventType: "visualization_shared",
+        entityType: "visualization",
+        entityId: viz.id,
+        metadata: {
+          visualization_id: viz.id,
+          wallpaper_id: viz.wallpaper_id,
+          wallpaper_name: viz.wallpapers?.title || null,
+          room_type: viz.room_type || "Visualization",
+          thumbnail_url: viz.result_image_url,
+        },
+      });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {

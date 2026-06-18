@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
+import { logActivityEvent } from "@/lib/activity-client";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -113,10 +114,21 @@ function WallpaperList() {
       }
 
       toast.success("Wallpaper deleted successfully");
+      await logActivityEvent({
+        eventType: "wallpaper_deleted",
+        entityType: "wallpaper",
+        entityId: deleteTarget.id,
+        metadata: {
+          wallpaper_id: deleteTarget.id,
+          wallpaper_name: deleteTarget.title,
+          thumbnail_url: deleteTarget.image,
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["wallpapers-count"] });
       queryClient.invalidateQueries({ queryKey: ["recent-wallpapers"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-activity"] });
       setDeleteTarget(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";

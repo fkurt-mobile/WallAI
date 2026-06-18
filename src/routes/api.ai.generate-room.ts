@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { generateRoomDesign } from "@/services/grokService";
 import { Buffer } from "buffer";
+import { createActivityEvent } from "@/lib/activity-server";
 
 // Shim global WebSocket to prevent Supabase client initialization crash on Node < 22
 if (typeof globalThis.WebSocket === "undefined") {
@@ -16,6 +17,7 @@ interface GenerateRoomBody {
   mood?: string;
   customPrompt?: string;
   variationCount?: number;
+  isRegeneration?: boolean;
 }
 
 interface AiGenerationsInsertClient {
@@ -126,6 +128,7 @@ export const Route = createFileRoute("/api/ai/generate-room")({
           }
 
           const { wallpaperId, roomType, style, mood, customPrompt } = body;
+          const isRegeneration = body.isRegeneration === true;
           const requestedVariationCount = Number(body.variationCount);
           const variationCount =
             Number.isInteger(requestedVariationCount) &&
@@ -355,6 +358,23 @@ export const Route = createFileRoute("/api/ai/generate-room")({
               getErrorMessage(vizErr),
             );
           }
+
+          const primaryVisualization = visualizationRecords?.[0];
+          await createActivityEvent(supabase, {
+            workspaceId: companyId,
+            userId: user.id,
+            eventType: isRegeneration ? "variation_created" : "visualization_created",
+            entityType: primaryVisualization?.id ? "visualization" : "ai_generation",
+            entityId: primaryVisualization?.id || generationId,
+            metadata: {
+              visualization_id: primaryVisualization?.id || null,
+              wallpaper_id: wallpaper.id,
+              wallpaper_name: wallpaper.title,
+              room_type: roomType,
+              thumbnail_url: primaryVisualization?.result_image_url || variationUrls[0] || null,
+              variation_count: variationCount,
+            },
+          });
 
           console.log(`[Generate Room] Complete. Returning ${variationCount} variation URLs.`);
           return new Response(

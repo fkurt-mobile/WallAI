@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import {
+  formatRelativeActivityTime,
   formatRelativeGeneratedTime,
   formatShortDate,
   parseDatabaseDate,
@@ -17,7 +18,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CircleHelp, Download, Eye, Share2, Sparkles } from "lucide-react";
+import type { ActivityFeedItem } from "@/lib/activity";
+import { logActivityEvent } from "@/lib/activity-client";
+import {
+  CircleHelp,
+  Download,
+  Eye,
+  Pencil,
+  RefreshCw,
+  Share2,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 const trackEvent = (eventName: string) => {
   console.log(`[Analytics] Event tracked: ${eventName}`);
@@ -85,11 +98,16 @@ interface DashboardMetrics {
   recentDesigns: RecentVisualizationRecord[];
 }
 
+interface DashboardActivityResponse {
+  items: ActivityFeedItem[];
+}
+
 function Dashboard() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const navigate = useNavigate();
   const recentDesignsTracked = useRef(false);
   const topWallpapersTracked = useRef(false);
+  const activityTracked = useRef(false);
 
   const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useQuery({
     queryKey: ["dashboard-metrics", profile?.id],
@@ -127,9 +145,39 @@ function Dashboard() {
     retry: false,
   });
 
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ["dashboard-activity", profile?.id],
+    queryFn: async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("No active session. Please log in.");
+      }
+
+      const response = await fetch("/api/dashboard-activity", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to load activity feed.");
+      }
+
+      return (await response.json()) as DashboardActivityResponse;
+    },
+    enabled: !!profile?.id,
+    retry: false,
+  });
+
   const recentWallpapers = metrics?.recentWallpapers || [];
   const recentDesigns = metrics?.recentDesigns || [];
   const topWallpapers = metrics?.topWallpapers || [];
+  const activityItems = activityData?.items || [];
   const latestViz = recentDesigns[0] || null;
   const isLoading = profileLoading || metricsLoading;
   const showSuccessRateCard = metrics?.successRate !== null;
@@ -163,6 +211,12 @@ function Dashboard() {
     topWallpapersTracked.current = true;
     trackEvent("dashboard_top_wallpapers_loaded");
   }, [metrics, metricsLoading, profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id || activityLoading || activityTracked.current || !activityData) return;
+    activityTracked.current = true;
+    trackEvent("dashboard_activity_loaded");
+  }, [activityData, activityLoading, profile?.id]);
 
   const handleStartDesign = () => {
     trackEvent("dashboard_start_design_clicked");
@@ -210,10 +264,12 @@ function Dashboard() {
           title: design.wallpapers?.title || "Murra AI design",
           url: shareUrl,
         });
+        await logVisualizationActivity("visualization_shared", design);
         return;
       }
 
       await navigator.clipboard.writeText(shareUrl);
+      await logVisualizationActivity("visualization_shared", design);
       toast.success("Design link copied.");
     } catch {
       toast.error("Unable to share this design right now.");
@@ -234,6 +290,42 @@ function Dashboard() {
       to: "/tools/wallpaper-visualizer",
       search: { wallpaper: wallpaperId },
     });
+  };
+
+  const logVisualizationActivity = async (
+    eventType: "visualization_shared" | "visualization_downloaded",
+    design: RecentVisualizationRecord,
+    format?: string,
+  ) => {
+    await logActivityEvent({
+      eventType,
+      entityType: "visualization",
+      entityId: design.id,
+      metadata: {
+        visualization_id: design.id,
+        wallpaper_id: design.wallpaper_id,
+        wallpaper_name: design.wallpapers?.title || null,
+        room_type: design.room_type || "Visualization",
+        format: format || null,
+        thumbnail_url: design.result_image_url,
+      },
+    });
+  };
+
+  const handleDownloadDesign = (design: RecentVisualizationRecord) => {
+    void logVisualizationActivity(
+      "visualization_downloaded",
+      design,
+      getAssetFormat(design.result_image_url),
+    );
+  };
+
+  const handleActivityClick = (item: ActivityFeedItem) => {
+    trackEvent("dashboard_activity_clicked");
+    trackEvent("activity_item_opened");
+
+    if (!item.href) return;
+    window.location.href = item.href;
   };
 
   return (
@@ -483,6 +575,7 @@ function Dashboard() {
                           label="Download design"
                           href={design.result_image_url}
                           download
+                          onClick={() => handleDownloadDesign(design)}
                         >
                           <Download className="h-4 w-4" />
                         </OverlayIconLink>
@@ -711,6 +804,97 @@ function Dashboard() {
               </div>
             )}
           </section>
+
+          <section className="mt-16">
+            <div className="flex items-end justify-between gap-6 mb-6">
+              <div>
+                <h2 className="font-serif text-3xl italic">Activity</h2>
+                <p className="text-sm text-brand-900/55 mt-2">
+                  Recent actions across your wallpaper studio.
+                </p>
+              </div>
+            </div>
+
+            <div className="border border-brand-900/8 bg-card shadow-sm">
+              {activityLoading ? (
+                <div className="p-6 md:p-8">
+                  <ActivitySkeleton />
+                  <ActivitySkeleton />
+                  <ActivitySkeleton />
+                  <ActivitySkeleton />
+                </div>
+              ) : activityItems.length === 0 ? (
+                <div className="py-16 px-8 text-center">
+                  <Sparkles className="size-10 text-accent/45 mx-auto mb-5" />
+                  <p className="text-brand-900 font-serif text-2xl italic">No activity yet.</p>
+                  <p className="text-brand-900/55 mt-3 mb-8">
+                    Upload your first wallpaper or generate your first AI room design.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleStartDesign}
+                    className="inline-flex items-center gap-2 bg-brand-900 text-brand-50 px-6 py-3 text-[11px] uppercase tracking-[0.2em] hover:bg-brand-800 transition-colors cursor-pointer"
+                  >
+                    Start Designing
+                  </button>
+                </div>
+              ) : (
+                <div className="p-6 md:p-8">
+                  {activityItems.map((item, index) => {
+                    const Icon = getActivityIcon(item.type);
+                    const rowContent = (
+                      <>
+                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center border border-brand-900/10 bg-brand-50">
+                          <Icon className="h-4 w-4 text-brand-900/75" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-brand-900 leading-relaxed">{item.title}</p>
+                          <p className="mt-1 text-xs text-brand-900/45">
+                            {formatRelativeActivityTime(item.created_at)}
+                          </p>
+                        </div>
+                        {item.thumbnail_url ? (
+                          <img
+                            src={item.thumbnail_url}
+                            alt=""
+                            className="hidden h-12 w-12 shrink-0 object-cover md:block"
+                          />
+                        ) : null}
+                      </>
+                    );
+
+                    if (item.href) {
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleActivityClick(item)}
+                          className={`flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-brand-50/60 ${
+                            index < activityItems.length - 1
+                              ? "border-b border-brand-900/8"
+                              : ""
+                          }`}
+                        >
+                          {rowContent}
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-4 py-4 ${
+                          index < activityItems.length - 1 ? "border-b border-brand-900/8" : ""
+                        }`}
+                      >
+                        {rowContent}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
         </TooltipProvider>
       </div>
     </AppShell>
@@ -802,6 +986,19 @@ function TopWallpaperSkeleton() {
   );
 }
 
+function ActivitySkeleton() {
+  return (
+    <div className="flex items-center gap-4 py-4">
+      <Skeleton className="h-10 w-10 bg-brand-900/8" />
+      <div className="flex-1">
+        <Skeleton className="h-4 w-3/5 bg-brand-900/8" />
+        <Skeleton className="mt-2 h-3 w-24 bg-brand-900/6" />
+      </div>
+      <Skeleton className="hidden h-12 w-12 bg-brand-900/6 md:block" />
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
@@ -850,11 +1047,13 @@ function OverlayIconLink({
   href,
   children,
   download,
+  onClick,
 }: {
   label: string;
   href: string;
   children: React.ReactNode;
   download?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <a
@@ -862,7 +1061,10 @@ function OverlayIconLink({
       download={download}
       target="_blank"
       rel="noreferrer"
-      onClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.();
+      }}
       className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-50/92 text-brand-900 backdrop-blur-sm transition-colors hover:bg-brand-50"
       aria-label={label}
       title={label}
@@ -943,4 +1145,33 @@ function getRecentDesignBadge(value: string | null | undefined): string | null {
     date.getUTCDate() === now.getUTCDate();
 
   return sameDay ? "Generated Today" : null;
+}
+
+function getActivityIcon(type: ActivityFeedItem["type"]) {
+  switch (type) {
+    case "wallpaper_uploaded":
+      return Upload;
+    case "wallpaper_updated":
+      return Pencil;
+    case "wallpaper_deleted":
+      return Trash2;
+    case "visualization_downloaded":
+      return Download;
+    case "visualization_shared":
+      return Share2;
+    case "variation_created":
+      return RefreshCw;
+    case "visualization_created":
+    default:
+      return Sparkles;
+  }
+}
+
+function getAssetFormat(url: string) {
+  const cleanUrl = url.split("?")[0] || "";
+  const extension = cleanUrl.split(".").pop()?.toLowerCase();
+
+  if (extension === "jpg" || extension === "jpeg") return "JPG";
+  if (extension === "webp") return "WEBP";
+  return "PNG";
 }

@@ -10,6 +10,8 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import type { ActivityEntityType, ActivityMetadata } from "@/lib/activity";
+import { logActivityEvent } from "@/lib/activity-client";
 
 // Pinterest isn't in lucide; use inline SVG
 function PinIcon({ className }: { className?: string }) {
@@ -24,12 +26,47 @@ export function SharePanel({
   title = "Share Visualization",
   shareUrl = typeof window !== "undefined" ? window.location.href : "",
   compact = false,
+  activityEntityId = null,
+  activityEntityType = "visualization",
+  activityMetadata,
 }: {
   title?: string;
   shareUrl?: string;
   compact?: boolean;
+  activityEntityId?: string | null;
+  activityEntityType?: ActivityEntityType;
+  activityMetadata?: ActivityMetadata;
 }) {
   const [copied, setCopied] = useState(false);
+
+  const recordShare = async () => {
+    if (!activityEntityId) return;
+    await logActivityEvent({
+      eventType: "visualization_shared",
+      entityType: activityEntityType,
+      entityId: activityEntityId,
+      metadata: {
+        ...activityMetadata,
+        visualization_id: activityMetadata?.visualization_id || activityEntityId,
+        thumbnail_url: activityMetadata?.thumbnail_url || shareUrl,
+      },
+    });
+  };
+
+  const recordDownload = async (format: "PNG" | "JPG") => {
+    if (!activityEntityId) return;
+    await logActivityEvent({
+      eventType: "visualization_downloaded",
+      entityType: activityEntityType,
+      entityId: activityEntityId,
+      metadata: {
+        ...activityMetadata,
+        visualization_id: activityMetadata?.visualization_id || activityEntityId,
+        format,
+        thumbnail_url: activityMetadata?.thumbnail_url || shareUrl,
+      },
+    });
+  };
 
   const platforms = [
     {
@@ -62,6 +99,7 @@ export function SharePanel({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
+      await recordShare();
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
       toast.success("Link copied to clipboard");
@@ -85,6 +123,7 @@ export function SharePanel({
 
       document.body.removeChild(a);
       window.URL.revokeObjectURL(blobUrl);
+      await recordDownload(format.toUpperCase() as "PNG" | "JPG");
       toast.success(`Successfully downloaded ${format.toUpperCase()}`);
     } catch (err) {
       // Fallback: open in new tab if CORS blocks fetch
@@ -94,6 +133,7 @@ export function SharePanel({
       a.target = "_blank";
       a.download = `visualization.${format}`;
       a.click();
+      await recordDownload(format.toUpperCase() as "PNG" | "JPG");
     }
   };
 
@@ -120,6 +160,7 @@ export function SharePanel({
               href={p.href}
               target="_blank"
               rel="noreferrer"
+              onClick={() => void recordShare()}
               title={`Share via ${p.name}`}
               className={
                 "group flex flex-col items-center justify-center text-center gap-2 px-2 border border-brand-900/10 rounded-md hover:border-accent hover:bg-accent/5 transition-colors min-w-0 " +

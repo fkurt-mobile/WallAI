@@ -12,6 +12,8 @@ export interface VizPreview {
   style?: string | null;
   mood?: string | null;
   createdAt?: string | null;
+  activityEntityId?: string | null;
+  activityEntityType?: "visualization" | "ai_generation";
 }
 
 export function VisualizationPreviewModal({
@@ -136,7 +138,22 @@ export function VisualizationPreviewModal({
                 <DetailRow label="Created" value={createdDate} />
               </div>
             </div>
-            <SharePanel title="Share Visualization" shareUrl={active.image} compact />
+            <SharePanel
+              title="Share Visualization"
+              shareUrl={active.image}
+              compact
+              activityEntityId={active.activityEntityId || active.id}
+              activityEntityType={active.activityEntityType || "visualization"}
+              activityMetadata={{
+                visualization_id:
+                  active.activityEntityType === "visualization"
+                    ? active.activityEntityId || active.id
+                    : null,
+                wallpaper_name: active.wallpaperTitle || null,
+                room_type: active.room || null,
+                thumbnail_url: active.image,
+              }}
+            />
           </div>
         </div>
       </DialogContent>

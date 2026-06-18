@@ -13,6 +13,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiDashboardMetricsRouteImport } from './routes/api.dashboard-metrics'
+import { Route as ApiDashboardActivityRouteImport } from './routes/api.dashboard-activity'
+import { Route as ApiActivityEventsRouteImport } from './routes/api.activity-events'
 import { Route as AuthenticatedWallpapersRouteImport } from './routes/_authenticated.wallpapers'
 import { Route as AuthenticatedVisualizationsRouteImport } from './routes/_authenticated.visualizations'
 import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated.tools'
@@ -46,6 +48,16 @@ const IndexRoute = IndexRouteImport.update({
 const ApiDashboardMetricsRoute = ApiDashboardMetricsRouteImport.update({
   id: '/api/dashboard-metrics',
   path: '/api/dashboard-metrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDashboardActivityRoute = ApiDashboardActivityRouteImport.update({
+  id: '/api/dashboard-activity',
+  path: '/api/dashboard-activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiActivityEventsRoute = ApiActivityEventsRouteImport.update({
+  id: '/api/activity-events',
+  path: '/api/activity-events',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWallpapersRoute = AuthenticatedWallpapersRouteImport.update({
@@ -140,6 +152,8 @@ export interface FileRoutesByFullPath {
   '/tools': typeof AuthenticatedToolsRouteWithChildren
   '/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
   '/wallpapers': typeof AuthenticatedWallpapersRouteWithChildren
+  '/api/activity-events': typeof ApiActivityEventsRoute
+  '/api/dashboard-activity': typeof ApiDashboardActivityRoute
   '/api/dashboard-metrics': typeof ApiDashboardMetricsRoute
   '/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
@@ -159,6 +173,8 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/tools': typeof AuthenticatedToolsRouteWithChildren
   '/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
+  '/api/activity-events': typeof ApiActivityEventsRoute
+  '/api/dashboard-activity': typeof ApiDashboardActivityRoute
   '/api/dashboard-metrics': typeof ApiDashboardMetricsRoute
   '/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
@@ -181,6 +197,8 @@ export interface FileRoutesById {
   '/_authenticated/tools': typeof AuthenticatedToolsRouteWithChildren
   '/_authenticated/visualizations': typeof AuthenticatedVisualizationsRouteWithChildren
   '/_authenticated/wallpapers': typeof AuthenticatedWallpapersRouteWithChildren
+  '/api/activity-events': typeof ApiActivityEventsRoute
+  '/api/dashboard-activity': typeof ApiDashboardActivityRoute
   '/api/dashboard-metrics': typeof ApiDashboardMetricsRoute
   '/_authenticated/tools/image-crop': typeof AuthenticatedToolsImageCropRoute
   '/_authenticated/tools/wallpaper-visualizer': typeof AuthenticatedToolsWallpaperVisualizerRoute
@@ -203,6 +221,8 @@ export interface FileRouteTypes {
     | '/tools'
     | '/visualizations'
     | '/wallpapers'
+    | '/api/activity-events'
+    | '/api/dashboard-activity'
     | '/api/dashboard-metrics'
     | '/tools/image-crop'
     | '/tools/wallpaper-visualizer'
@@ -222,6 +242,8 @@ export interface FileRouteTypes {
     | '/profile'
     | '/tools'
     | '/visualizations'
+    | '/api/activity-events'
+    | '/api/dashboard-activity'
     | '/api/dashboard-metrics'
     | '/tools/image-crop'
     | '/tools/wallpaper-visualizer'
@@ -243,6 +265,8 @@ export interface FileRouteTypes {
     | '/_authenticated/tools'
     | '/_authenticated/visualizations'
     | '/_authenticated/wallpapers'
+    | '/api/activity-events'
+    | '/api/dashboard-activity'
     | '/api/dashboard-metrics'
     | '/_authenticated/tools/image-crop'
     | '/_authenticated/tools/wallpaper-visualizer'
@@ -260,6 +284,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiActivityEventsRoute: typeof ApiActivityEventsRoute
+  ApiDashboardActivityRoute: typeof ApiDashboardActivityRoute
   ApiDashboardMetricsRoute: typeof ApiDashboardMetricsRoute
   ApiAiApplyWallpaperRoute: typeof ApiAiApplyWallpaperRoute
   ApiAiApplyWallpaperToUploadedRoomRoute: typeof ApiAiApplyWallpaperToUploadedRoomRoute
@@ -295,6 +321,20 @@ declare module '@tanstack/react-router' {
       path: '/api/dashboard-metrics'
       fullPath: '/api/dashboard-metrics'
       preLoaderRoute: typeof ApiDashboardMetricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/dashboard-activity': {
+      id: '/api/dashboard-activity'
+      path: '/api/dashboard-activity'
+      fullPath: '/api/dashboard-activity'
+      preLoaderRoute: typeof ApiDashboardActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/activity-events': {
+      id: '/api/activity-events'
+      path: '/api/activity-events'
+      fullPath: '/api/activity-events'
+      preLoaderRoute: typeof ApiActivityEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/wallpapers': {
@@ -476,6 +516,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiActivityEventsRoute: ApiActivityEventsRoute,
+  ApiDashboardActivityRoute: ApiDashboardActivityRoute,
   ApiDashboardMetricsRoute: ApiDashboardMetricsRoute,
   ApiAiApplyWallpaperRoute: ApiAiApplyWallpaperRoute,
   ApiAiApplyWallpaperToUploadedRoomRoute:

@@ -32,6 +32,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { logActivityEvent } from "@/lib/activity-client";
 
 const searchSchema = z.object({
   wallpaper: z.string().optional(),
@@ -283,6 +284,7 @@ function AiRoomDesigner() {
           mood: design.mood,
           customPrompt: design.customPrompt || undefined,
           variationCount: design.variationCount,
+          isRegeneration: isAppending,
         }),
       });
 
@@ -328,6 +330,7 @@ function AiRoomDesigner() {
       queryClient.invalidateQueries({
         queryKey: ["wallpaper-visualizations", design.wallpaper.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-activity"] });
       toast.success("Your AI room designs are ready!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Generation failed. Please try again.";
@@ -461,6 +464,7 @@ function AiRoomDesigner() {
         {/* ── Result Gallery ── */}
         {step === "result" && result && design.wallpaper && generatedImages.length > 0 && (
           <ResultGallery
+            generationId={result.id}
             wallpaper={design.wallpaper}
             roomType={design.roomType}
             style={design.style}
@@ -1072,7 +1076,7 @@ function GeneratingScreen({
 
 const getVariationLabel = (index: number) => String.fromCharCode(65 + (index % 26));
 
-const downloadImage = async (url: string, filename: string) => {
+const downloadImage = async (url: string, filename: string, onComplete?: () => Promise<void> | void) => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -1084,8 +1088,10 @@ const downloadImage = async (url: string, filename: string) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
+    await onComplete?.();
   } catch {
     window.open(url, "_blank");
+    await onComplete?.();
   }
 };
 
@@ -1098,6 +1104,7 @@ function PinterestIcon({ className }: { className?: string }) {
 }
 
 function ResultGallery({
+  generationId,
   wallpaper,
   roomType,
   style,
@@ -1110,6 +1117,7 @@ function ResultGallery({
   generating,
   variationCount,
 }: {
+  generationId: string | null;
   wallpaper: Wallpaper;
   roomType: string;
   style: string;
@@ -1160,10 +1168,32 @@ function ResultGallery({
     },
   ];
 
+  const recordVisualizationActivity = async (
+    eventType: "visualization_shared" | "visualization_downloaded",
+    format?: "PNG" | "JPG",
+  ) => {
+    const entityType = activeImage?.visualizationId ? "visualization" : "ai_generation";
+    const entityId = activeImage?.visualizationId || generationId || null;
+    await logActivityEvent({
+      eventType,
+      entityType,
+      entityId,
+      metadata: {
+        visualization_id: activeImage?.visualizationId || null,
+        wallpaper_id: wallpaper.id,
+        wallpaper_name: wallpaper.title,
+        room_type: roomType,
+        format: format || null,
+        thumbnail_url: activeImageUrl,
+      },
+    });
+  };
+
   const handleShare = async () => {
     if (disabled) return;
     try {
       await navigator.clipboard.writeText(activeImageUrl);
+      await recordVisualizationActivity("visualization_shared");
       setShareToast(true);
       setTimeout(() => setShareToast(false), 2000);
     } catch {
@@ -1360,7 +1390,9 @@ function ResultGallery({
             <button
               id="download-png-btn"
               onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.png`)
+                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.png`, () =>
+                  recordVisualizationActivity("visualization_downloaded", "PNG"),
+                )
               }
               disabled={disabled}
               className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
@@ -1370,7 +1402,9 @@ function ResultGallery({
             <button
               id="download-jpg-btn"
               onClick={() =>
-                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.jpg`)
+                downloadImage(activeImageUrl, `${wallpaper.code}_room_${activeLabel}.jpg`, () =>
+                  recordVisualizationActivity("visualization_downloaded", "JPG"),
+                )
               }
               disabled={disabled}
               className="inline-flex items-center justify-center gap-2 border border-brand-900/15 px-4 py-3 text-[10px] uppercase tracking-[0.2em] hover:bg-card cursor-pointer font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
@@ -1391,6 +1425,9 @@ function ResultGallery({
                     href={disabled ? undefined : platform.href}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={() => {
+                      void recordVisualizationActivity("visualization_shared");
+                    }}
                     aria-disabled={disabled}
                     tabIndex={disabled ? -1 : undefined}
                     title={`Share via ${platform.name}`}

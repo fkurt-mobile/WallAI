@@ -78,6 +78,8 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
       if (error) throw error;
       const mappedVisualizations = (data as unknown as VisualizationHistoryRow[]).map((v) => ({
         id: v.id,
+        activityEntityId: v.id,
+        activityEntityType: "visualization" as const,
         room: v.room_type || "Room",
         image: v.result_image_url,
         wallpaperTitle: wallpaper.title,
@@ -89,6 +91,8 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
       const seenUrls = new Set(mappedVisualizations.map((v) => v.image));
       let mappedAiGenerations: Array<{
         id: string;
+        activityEntityId: string;
+        activityEntityType: "ai_generation";
         room: string;
         image: string;
         wallpaperTitle: string;
@@ -120,6 +124,8 @@ export function WallpaperModal({ wallpaper, open, onOpenChange, onDelete }: Prop
                 return [
                   {
                     id: `${generation.id}-${index}`,
+                    activityEntityId: generation.id,
+                    activityEntityType: "ai_generation",
                     room: generation.room_type || "Room",
                     image: url,
                     wallpaperTitle: wallpaper.title,
